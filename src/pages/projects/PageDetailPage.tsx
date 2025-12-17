@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Upload, FileText, Tag, CheckCircle, XCircle, RotateCcw, MessageSquare, Loader2 } from 'lucide-react';
+import { ArrowLeft, FileText, Tag, CheckCircle, XCircle, RotateCcw, MessageSquare, Loader2 } from 'lucide-react';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ScoreDisplay from '../../components/ui/ScoreDisplay';
 import { useAuth } from '../../contexts/AuthContext';
@@ -455,62 +455,62 @@ const PageDetailPage: React.FC = () => {
                             <div className="bg-white border border-[var(--color-border)] rounded-lg p-6">
                                 <h2 className="text-lg font-semibold mb-4 text-center">Overall Score</h2>
                                 <div className="flex justify-center mb-6">
-                                    <ScoreDisplay score={page.analysis.overall_score} size="lg" />
+                                    <ScoreDisplay score={page.analysis?.overall_score ?? 0} size="lg" />
                                 </div>
 
                                 <div className="space-y-3">
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span>SEO Score</span>
-                                            <span className="font-medium">{page.analysis.seo_score}%</span>
+                                            <span className="font-medium">{page.analysis?.seo_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
-                                            <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${page.analysis.seo_score}%` }} />
+                                            <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${page.analysis?.seo_score ?? 0}%` }} />
                                         </div>
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span>Readability</span>
-                                            <span className="font-medium">{page.analysis.readability_score}%</span>
+                                            <span className="font-medium">{page.analysis?.readability_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
-                                            <div className="bg-green-500 h-2 rounded-full" style={{ width: `${page.analysis.readability_score}%` }} />
+                                            <div className="bg-green-500 h-2 rounded-full" style={{ width: `${page.analysis?.readability_score ?? 0}%` }} />
                                         </div>
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span>Keyword Density</span>
-                                            <span className="font-medium">{page.analysis.keyword_density_score}%</span>
+                                            <span className="font-medium">{page.analysis?.keyword_density_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
-                                            <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${page.analysis.keyword_density_score}%` }} />
+                                            <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${page.analysis?.keyword_density_score ?? 0}%` }} />
                                         </div>
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span>Grammar</span>
-                                            <span className="font-medium">{page.analysis.grammar_score}%</span>
+                                            <span className="font-medium">{page.analysis?.grammar_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
-                                            <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${page.analysis.grammar_score}%` }} />
+                                            <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${page.analysis?.grammar_score ?? 0}%` }} />
                                         </div>
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span>Content Intent</span>
-                                            <span className="font-medium">{page.analysis.content_intent_score}%</span>
+                                            <span className="font-medium">{page.analysis?.content_intent_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
-                                            <div className="bg-pink-500 h-2 rounded-full" style={{ width: `${page.analysis.content_intent_score}%` }} />
+                                            <div className="bg-pink-500 h-2 rounded-full" style={{ width: `${page.analysis?.content_intent_score ?? 0}%` }} />
                                         </div>
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span>Technical Health</span>
-                                            <span className="font-medium">{page.analysis.technical_health_score}%</span>
+                                            <span className="font-medium">{page.analysis?.technical_health_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
-                                            <div className="bg-cyan-500 h-2 rounded-full" style={{ width: `${page.analysis.technical_health_score}%` }} />
+                                            <div className="bg-cyan-500 h-2 rounded-full" style={{ width: `${page.analysis?.technical_health_score ?? 0}%` }} />
                                         </div>
                                     </div>
                                 </div>
