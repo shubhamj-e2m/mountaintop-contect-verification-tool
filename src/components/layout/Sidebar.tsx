@@ -25,7 +25,6 @@ const Sidebar: React.FC = () => {
     const navItems = [
         { path: '/dashboard', icon: Home, label: 'Dashboard' },
         { path: '/projects', icon: FolderOpen, label: 'Projects', expandable: true },
-        { path: '/tasks', icon: CheckSquare, label: 'My Tasks' },
         { path: '/activity', icon: Bell, label: 'Activity' },
     ];
 
@@ -61,13 +60,13 @@ const Sidebar: React.FC = () => {
                 }`}
         >
             {/* Logo/Brand */}
-            <div className="p-6 border-b border-border flex items-center justify-between">
+            <div className="px-4 h-14 border-b border-border flex items-center justify-between">
                 {!isCollapsed && (
-                    <h1 className="text-xl font-bold text-text-primary">ContentVerify</h1>
+                    <img src="/mountaintop-logo.png" alt="Mountaintop" className="h-7 object-contain" />
                 )}
                 <button
                     onClick={() => setIsCollapsed(!isCollapsed)}
-                    className="p-2 hover:bg-bg-tertiary rounded-md transition-smooth"
+                    className="p-2 hover:bg-bg-tertiary rounded-md transition-smooth ml-auto"
                 >
                     {isCollapsed ? <Menu size={20} /> : <X size={20} />}
                 </button>
@@ -80,8 +79,8 @@ const Sidebar: React.FC = () => {
                         <Link
                             to={item.path}
                             className={`flex items-center gap-3 px-3 py-2 rounded-md transition-smooth ${isActive(item.path)
-                                    ? 'bg-accent-light text-accent font-medium'
-                                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+                                ? 'bg-accent-light text-accent font-medium'
+                                : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
                                 }`}
                         >
                             <item.icon size={20} />

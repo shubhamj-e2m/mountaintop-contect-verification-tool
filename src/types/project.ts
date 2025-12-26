@@ -11,7 +11,8 @@ export type PageStatus =
 export interface SEOData {
     id: string;
     page_id: string;
-    keywords: string[];
+    primaryKeywords: string[];   // High-priority target keywords (typically 1-3)
+    secondaryKeywords: string[]; // Supporting/long-tail keywords
     uploaded_by: string;
     uploaded_at: string;
     version: number;
@@ -63,6 +64,7 @@ export interface Project {
 
 export interface KeywordAnalysis {
     keyword: string;
+    type: 'primary' | 'secondary';
     frequency: number;
     density: string;
     in_title: boolean;

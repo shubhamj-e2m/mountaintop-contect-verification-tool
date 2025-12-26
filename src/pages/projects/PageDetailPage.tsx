@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, FileText, Tag, CheckCircle, XCircle, RotateCcw, MessageSquare, Loader2 } from 'lucide-react';
+import { ArrowLeft, FileText, Tag, CheckCircle, XCircle, RotateCcw, MessageSquare, Loader2, TrendingUp, Minus } from 'lucide-react';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ScoreDisplay from '../../components/ui/ScoreDisplay';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,7 +17,8 @@ const PageDetailPage: React.FC = () => {
     const [newComment, setNewComment] = useState('');
 
     // Form state
-    const [seoKeywordsInput, setSeoKeywordsInput] = useState('');
+    const [primaryKeywordsInput, setPrimaryKeywordsInput] = useState('');
+    const [secondaryKeywordsInput, setSecondaryKeywordsInput] = useState('');
     const [contentMetaTitle, setContentMetaTitle] = useState('');
     const [contentMetaDesc, setContentMetaDesc] = useState('');
     const [contentH1, setContentH1] = useState('');
@@ -44,36 +45,63 @@ const PageDetailPage: React.FC = () => {
     const hasSEO = !!page.seo_data;
     const hasContent = !!page.content_data;
     const isVerifier = user?.role === 'content_verifier';
-    const isSEOAnalyst = user?.role === 'seo_analyst';
     const isContentWriter = user?.role === 'content_writer';
+
+    // Helper function to convert percentage to letter grade
+    const getLetterGrade = (score: number): { grade: string; color: string } => {
+        if (score >= 90) return { grade: 'A', color: 'text-green-600' };
+        if (score >= 80) return { grade: 'B', color: 'text-blue-600' };
+        if (score >= 70) return { grade: 'C', color: 'text-yellow-600' };
+        if (score >= 60) return { grade: 'D', color: 'text-orange-600' };
+        return { grade: 'F', color: 'text-red-600' };
+    };
+
+    // Mock SEMrush-style keyword stats
+    const getKeywordStats = (keyword: string) => {
+        // Generate consistent mock data based on keyword hash
+        const hash = keyword.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        return {
+            searchVolume: Math.floor((hash % 50) * 100 + 500),
+            difficulty: Math.floor(hash % 100),
+            cpc: ((hash % 50) / 10 + 0.5).toFixed(2),
+            trend: hash % 2 === 0 ? 'up' : 'stable'
+        };
+    };
 
     // Helper function to highlight keywords for verifier
     const highlightKeywords = (text: string): React.ReactElement => {
-        if (!isVerifier || !hasSEO || !page.seo_data?.keywords) {
+        if (!isVerifier || !hasSEO || !page.seo_data) {
             return <>{text}</>;
         }
 
-        const keywords = page.seo_data.keywords;
-        let highlightedText = text;
+        const primaryKeywords = page.seo_data.primaryKeywords || [];
+        const secondaryKeywords = page.seo_data.secondaryKeywords || [];
+        const allKeywords = [...primaryKeywords, ...secondaryKeywords];
+
+        if (allKeywords.length === 0) return <>{text}</>;
 
         // Create a regex pattern to match any keyword (case-insensitive)
-        const pattern = keywords.map(kw => kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+        const pattern = allKeywords.map(kw => kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
         if (!pattern) return <>{text}</>;
 
         const regex = new RegExp(`(${pattern})`, 'gi');
-        const parts = highlightedText.split(regex);
+        const parts = text.split(regex);
 
         return (
             <>
                 {parts.map((part, i) => {
-                    const isKeyword = keywords.some(kw =>
+                    const isPrimary = primaryKeywords.some(kw =>
                         part.toLowerCase() === kw.toLowerCase()
                     );
-                    return isKeyword ? (
-                        <mark key={i} className="bg-yellow-200 px-0.5 rounded">{part}</mark>
-                    ) : (
-                        <span key={i}>{part}</span>
+                    const isSecondary = secondaryKeywords.some(kw =>
+                        part.toLowerCase() === kw.toLowerCase()
                     );
+                    if (isPrimary) {
+                        return <mark key={i} className="bg-yellow-200 px-0.5 rounded">{part}</mark>;
+                    } else if (isSecondary) {
+                        return <mark key={i} className="bg-cyan-100 px-0.5 rounded">{part}</mark>;
+                    }
+                    return <span key={i}>{part}</span>;
                 })}
             </>
         );
@@ -85,7 +113,8 @@ const PageDetailPage: React.FC = () => {
             return [];
         }
 
-        const keywords = page.seo_data.keywords;
+        const primaryKeywords = page.seo_data.primaryKeywords || [];
+        const secondaryKeywords = page.seo_data.secondaryKeywords || [];
         const content = page.content_data.parsed_content;
 
         // Combine all text content for total word count
@@ -100,32 +129,46 @@ const PageDetailPage: React.FC = () => {
 
         const totalWords = allText.split(/\s+/).filter(w => w.length > 0).length;
 
-        return keywords.map(keyword => {
-            const keywordLower = keyword.toLowerCase();
-
-            // Count occurrences (case-insensitive)
+        // Helper to count keyword occurrences in text
+        const countOccurrences = (text: string, keywordLower: string): number => {
             const escapedKeyword = keywordLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const regex = new RegExp(`\\b${escapedKeyword}\\b`, 'gi');
-            const matches = allText.match(regex);
-            const frequency = matches ? matches.length : 0;
+            const matches = text.toLowerCase().match(regex);
+            return matches ? matches.length : 0;
+        };
+
+        const analyzeKeyword = (keyword: string, type: 'primary' | 'secondary') => {
+            const keywordLower = keyword.toLowerCase();
+
+            // Count occurrences in each section
+            const titleCount = countOccurrences(content.meta_title || '', keywordLower);
+            const h1Count = (content.h1 || []).reduce((sum, h) => sum + countOccurrences(h, keywordLower), 0);
+            const h2Count = (content.h2 || []).reduce((sum, h) => sum + countOccurrences(h, keywordLower), 0);
+            const h3Count = (content.h3 || []).reduce((sum, h) => sum + countOccurrences(h, keywordLower), 0);
+            const paraCount = (content.paragraphs || []).reduce((sum, p) => sum + countOccurrences(p, keywordLower), 0);
+
+            const totalCount = titleCount + h1Count + h2Count + h3Count + paraCount;
 
             // Calculate density
-            const density = totalWords > 0 ? ((frequency / totalWords) * 100).toFixed(2) + '%' : '0%';
-
-            // Check placement
-            const inTitle = (content.meta_title || '').toLowerCase().includes(keywordLower);
-            const inH1 = (content.h1 || []).some(h => h.toLowerCase().includes(keywordLower));
-            const inFirstParagraph = (content.paragraphs?.[0] || '').toLowerCase().includes(keywordLower);
+            const density = totalWords > 0 ? ((totalCount / totalWords) * 100).toFixed(2) + '%' : '0%';
 
             return {
                 keyword,
-                frequency,
+                type,
+                frequency: totalCount,
                 density,
-                in_title: inTitle,
-                in_h1: inH1,
-                in_first_paragraph: inFirstParagraph
+                titleCount,
+                h1Count,
+                h2Count,
+                h3Count,
+                paraCount
             };
-        });
+        };
+
+        return [
+            ...primaryKeywords.map(kw => analyzeKeyword(kw, 'primary')),
+            ...secondaryKeywords.map(kw => analyzeKeyword(kw, 'secondary'))
+        ];
     };
 
     const keywordAnalysis = calculateKeywordAnalysis();
@@ -134,12 +177,14 @@ const PageDetailPage: React.FC = () => {
     // Handlers
     const handleSEOUpload = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!seoKeywordsInput.trim() || !projectId || !pageId || !user) return;
+        if (!primaryKeywordsInput.trim() || !projectId || !pageId || !user) return;
 
-        const keywords = seoKeywordsInput.split('\n').map(k => k.trim()).filter(k => k);
-        uploadSEOKeywords(projectId, pageId, keywords, user.id);
+        const primaryKeywords = primaryKeywordsInput.split('\n').map(k => k.trim()).filter(k => k);
+        const secondaryKeywords = secondaryKeywordsInput.split('\n').map(k => k.trim()).filter(k => k);
+        uploadSEOKeywords(projectId, pageId, primaryKeywords, secondaryKeywords, user.id);
 
-        setSeoKeywordsInput('');
+        setPrimaryKeywordsInput('');
+        setSecondaryKeywordsInput('');
         setShowSEOModal(false);
 
         if (hasContent) {
@@ -248,10 +293,11 @@ const PageDetailPage: React.FC = () => {
                                 <Tag size={20} className="text-[var(--color-accent)]" />
                                 <h2 className="text-lg font-semibold">SEO Keywords</h2>
                             </div>
-                            {isSEOAnalyst && (
+                            {isContentWriter && (
                                 <button
                                     onClick={() => {
-                                        setSeoKeywordsInput(page.seo_data?.keywords.join('\n') || '');
+                                        setPrimaryKeywordsInput(page.seo_data?.primaryKeywords?.join('\n') || '');
+                                        setSecondaryKeywordsInput(page.seo_data?.secondaryKeywords?.join('\n') || '');
                                         setShowSEOModal(true);
                                     }}
                                     className="px-3 py-1.5 text-sm bg-[var(--color-accent)] text-white rounded-md hover:opacity-90"
@@ -262,14 +308,71 @@ const PageDetailPage: React.FC = () => {
                         </div>
 
                         {hasSEO ? (
-                            <div>
-                                <div className="flex flex-wrap gap-2 mb-3">
-                                    {page.seo_data!.keywords.map((kw, i) => (
-                                        <span key={i} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                                            {kw}
-                                        </span>
-                                    ))}
+                            <div className="space-y-4">
+                                {/* Primary Keywords */}
+                                <div>
+                                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Primary Keywords</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {page.seo_data!.primaryKeywords.map((kw: string, i: number) => {
+                                            const stats = getKeywordStats(kw);
+                                            return (
+                                                <div key={i} className="relative group">
+                                                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium cursor-help">
+                                                        {kw}
+                                                    </span>
+                                                    {/* Tooltip */}
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50">
+                                                        <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg min-w-[180px]">
+                                                            <div className="space-y-1.5">
+                                                                <div className="flex justify-between"><span className="text-gray-400">Volume:</span> <span className="font-medium">{stats.searchVolume.toLocaleString()}/mo</span></div>
+                                                                <div className="flex justify-between"><span className="text-gray-400">Difficulty:</span> <span className={`font-medium ${stats.difficulty > 70 ? 'text-red-400' : stats.difficulty > 40 ? 'text-yellow-400' : 'text-green-400'}`}>{stats.difficulty}%</span></div>
+                                                                <div className="flex justify-between"><span className="text-gray-400">CPC:</span> <span className="font-medium">${stats.cpc}</span></div>
+                                                                <div className="flex justify-between items-center"><span className="text-gray-400">Trend</span> <span className="font-medium flex items-center gap-1">{stats.trend === 'up' ? <><TrendingUp size={12} className="text-green-400" /> Rising</> : <><Minus size={12} className="text-gray-400" /> Stable</>}</span></div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 bg-gray-900 rotate-45"></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {page.seo_data!.primaryKeywords.length === 0 && (
+                                            <span className="text-sm text-gray-400 italic">None specified</span>
+                                        )}
+                                    </div>
                                 </div>
+
+                                {/* Secondary Keywords */}
+                                <div>
+                                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Secondary Keywords</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {page.seo_data!.secondaryKeywords.map((kw: string, i: number) => {
+                                            const stats = getKeywordStats(kw);
+                                            return (
+                                                <div key={i} className="relative group">
+                                                    <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-medium cursor-help">
+                                                        {kw}
+                                                    </span>
+                                                    {/* Tooltip */}
+                                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50">
+                                                        <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg min-w-[180px]">
+                                                            <div className="space-y-1.5">
+                                                                <div className="flex justify-between"><span className="text-gray-400">Volume:</span> <span className="font-medium">{stats.searchVolume.toLocaleString()}/mo</span></div>
+                                                                <div className="flex justify-between"><span className="text-gray-400">Difficulty:</span> <span className={`font-medium ${stats.difficulty > 70 ? 'text-red-400' : stats.difficulty > 40 ? 'text-yellow-400' : 'text-green-400'}`}>{stats.difficulty}%</span></div>
+                                                                <div className="flex justify-between"><span className="text-gray-400">CPC:</span> <span className="font-medium">${stats.cpc}</span></div>
+                                                                <div className="flex justify-between items-center"><span className="text-gray-400">Trend</span> <span className="font-medium flex items-center gap-1">{stats.trend === 'up' ? <><TrendingUp size={12} className="text-green-400" /> Rising</> : <><Minus size={12} className="text-gray-400" /> Stable</>}</span></div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 bg-gray-900 rotate-45"></div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {page.seo_data!.secondaryKeywords.length === 0 && (
+                                            <span className="text-sm text-gray-400 italic">None specified</span>
+                                        )}
+                                    </div>
+                                </div>
+
                                 <p className="text-xs text-[var(--color-text-tertiary)]">
                                     Version {page.seo_data!.version} • Updated {new Date(page.seo_data!.uploaded_at).toLocaleDateString()}
                                 </p>
@@ -278,7 +381,7 @@ const PageDetailPage: React.FC = () => {
                             <div className="text-center py-6 text-[var(--color-text-secondary)]">
                                 <Tag size={32} className="mx-auto text-gray-300 mb-2" />
                                 <p className="font-medium">No SEO keywords uploaded yet</p>
-                                {!isSEOAnalyst && <p className="text-sm mt-1">Waiting for SEO Analyst</p>}
+                                {!isContentWriter && <p className="text-sm mt-1">Waiting for Content Writer</p>}
                             </div>
                         )}
                     </div>
@@ -430,15 +533,20 @@ const PageDetailPage: React.FC = () => {
                             </div>
                             <div className="p-4 space-y-2">
                                 {keywordAnalysis.map((kw, i) => (
-                                    <div key={i} className="flex items-center justify-between p-3 bg-yellow-50 rounded-md">
+                                    <div key={i} className={`flex items-center justify-between p-3 rounded-md ${kw.type === 'primary' ? 'bg-yellow-50' : 'bg-gray-50'}`}>
                                         <div className="flex items-center gap-3">
-                                            <span className="px-2 py-1 bg-yellow-200 text-yellow-800 rounded text-sm font-medium">{kw.keyword}</span>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-medium uppercase ${kw.type === 'primary' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>
+                                                {kw.type}
+                                            </span>
+                                            <span className={`px-2 py-1 rounded text-sm font-medium ${kw.type === 'primary' ? 'bg-yellow-200 text-yellow-800' : 'bg-gray-200 text-gray-700'}`}>{kw.keyword}</span>
                                             <span className="text-sm text-gray-600">{kw.frequency}x ({kw.density})</span>
                                         </div>
-                                        <div className="flex items-center gap-3 text-sm">
-                                            <span className={`px-2 py-0.5 rounded ${kw.in_title ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>Title</span>
-                                            <span className={`px-2 py-0.5 rounded ${kw.in_h1 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>H1</span>
-                                            <span className={`px-2 py-0.5 rounded ${kw.in_first_paragraph ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>1st Para</span>
+                                        <div className="flex items-center gap-2 text-sm">
+                                            <span className={`px-2 py-0.5 rounded ${kw.titleCount > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>{kw.titleCount} Title</span>
+                                            <span className={`px-2 py-0.5 rounded ${kw.h1Count > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>{kw.h1Count} H1</span>
+                                            <span className={`px-2 py-0.5 rounded ${kw.h2Count > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>{kw.h2Count} H2</span>
+                                            <span className={`px-2 py-0.5 rounded ${kw.h3Count > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>{kw.h3Count} H3</span>
+                                            <span className={`px-2 py-0.5 rounded ${kw.paraCount > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>{kw.paraCount} Para</span>
                                         </div>
                                     </div>
                                 ))}
@@ -471,10 +579,9 @@ const PageDetailPage: React.FC = () => {
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span>Readability</span>
-                                            <span className="font-medium">{page.analysis?.readability_score ?? 0}%</span>
-                                        </div>
-                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                            <div className="bg-green-500 h-2 rounded-full" style={{ width: `${page.analysis?.readability_score ?? 0}%` }} />
+                                            <span className={`font-bold ${getLetterGrade(page.analysis?.readability_score ?? 0).color}`}>
+                                                Grade {getLetterGrade(page.analysis?.readability_score ?? 0).grade} ({page.analysis?.readability_score ?? 0}%)
+                                            </span>
                                         </div>
                                     </div>
                                     <div>
@@ -637,13 +744,25 @@ const PageDetailPage: React.FC = () => {
                             <h2 className="text-xl font-semibold mb-4">Upload SEO Keywords</h2>
                             <form onSubmit={handleSEOUpload} className="space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">Keywords (one per line) *</label>
+                                    <label className="block text-sm font-medium mb-1">Primary Keywords (one per line) *</label>
+                                    <p className="text-xs text-gray-500 mb-2">High-priority target keywords (1-3 recommended)</p>
                                     <textarea
-                                        rows={8}
-                                        placeholder="industrial pumps&#10;high-pressure systems&#10;pump manufacturer"
-                                        value={seoKeywordsInput}
-                                        onChange={(e) => setSeoKeywordsInput(e.target.value)}
+                                        rows={4}
+                                        placeholder="industrial pumps&#10;velocity pumps"
+                                        value={primaryKeywordsInput}
+                                        onChange={(e) => setPrimaryKeywordsInput(e.target.value)}
                                         required
+                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Secondary Keywords (one per line)</label>
+                                    <p className="text-xs text-gray-500 mb-2">Supporting/long-tail keywords</p>
+                                    <textarea
+                                        rows={4}
+                                        placeholder="high-pressure systems&#10;pump manufacturer"
+                                        value={secondaryKeywordsInput}
+                                        onChange={(e) => setSecondaryKeywordsInput(e.target.value)}
                                         className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
                                     />
                                 </div>

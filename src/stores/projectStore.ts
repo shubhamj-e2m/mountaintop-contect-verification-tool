@@ -16,7 +16,7 @@ interface ProjectStore {
     deletePage: (projectId: string, pageId: string) => void;
 
     // Data upload operations
-    uploadSEOKeywords: (projectId: string, pageId: string, keywords: string[], userId: string) => void;
+    uploadSEOKeywords: (projectId: string, pageId: string, primaryKeywords: string[], secondaryKeywords: string[], userId: string) => void;
     uploadContent: (projectId: string, pageId: string, content: ContentData['parsed_content'], userId: string, sheetUrl?: string) => void;
 
     // Status operations
@@ -133,14 +133,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         }));
     },
 
-    uploadSEOKeywords: (projectId, pageId, keywords, userId) => {
+    uploadSEOKeywords: (projectId, pageId, primaryKeywords, secondaryKeywords, userId) => {
         const page = get().getPage(projectId, pageId);
         const currentVersion = page?.seo_data?.version || 0;
 
         const seoData: SEOData = {
             id: `seo-${Date.now()}`,
             page_id: pageId,
-            keywords,
+            primaryKeywords,
+            secondaryKeywords,
             uploaded_by: userId,
             uploaded_at: new Date().toISOString(),
             version: currentVersion + 1,
@@ -226,14 +227,26 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
             grammar_score: grammarScore,
             content_intent_score: contentIntentScore,
             technical_health_score: technicalHealthScore,
-            keyword_analysis: page.seo_data.keywords.map((kw) => ({
-                keyword: kw,
-                frequency: Math.floor(Math.random() * 15) + 1,
-                density: `${(Math.random() * 3 + 0.5).toFixed(1)}%`,
-                in_title: Math.random() > 0.3,
-                in_h1: Math.random() > 0.4,
-                in_first_paragraph: Math.random() > 0.3,
-            })),
+            keyword_analysis: [
+                ...page.seo_data.primaryKeywords.map((kw) => ({
+                    keyword: kw,
+                    type: 'primary' as const,
+                    frequency: Math.floor(Math.random() * 15) + 5,
+                    density: `${(Math.random() * 2 + 1).toFixed(1)}%`,
+                    in_title: Math.random() > 0.2,
+                    in_h1: Math.random() > 0.3,
+                    in_first_paragraph: Math.random() > 0.2,
+                })),
+                ...page.seo_data.secondaryKeywords.map((kw) => ({
+                    keyword: kw,
+                    type: 'secondary' as const,
+                    frequency: Math.floor(Math.random() * 10) + 1,
+                    density: `${(Math.random() * 1.5 + 0.3).toFixed(1)}%`,
+                    in_title: Math.random() > 0.5,
+                    in_h1: Math.random() > 0.6,
+                    in_first_paragraph: Math.random() > 0.4,
+                })),
+            ],
             suggestions: [
                 {
                     type: 'info' as const,

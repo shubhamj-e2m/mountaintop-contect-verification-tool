@@ -47,7 +47,8 @@ export const mockProjects: Project[] = [
                 seo_data: {
                     id: 'seo-1',
                     page_id: '1-1',
-                    keywords: ['industrial pumps', 'velocity pumps', 'pump manufacturer', 'high-pressure pumps'],
+                    primaryKeywords: ['industrial pumps', 'velocity pumps'],
+                    secondaryKeywords: ['pump manufacturer', 'high-pressure pumps'],
                     uploaded_by: '1',
                     uploaded_at: '2024-01-18T09:00:00Z',
                     version: 1,
@@ -97,6 +98,7 @@ export const mockProjects: Project[] = [
                     keyword_analysis: [
                         {
                             keyword: 'industrial pumps',
+                            type: 'primary',
                             frequency: 12,
                             density: '2.3%',
                             in_title: true,
@@ -105,6 +107,7 @@ export const mockProjects: Project[] = [
                         },
                         {
                             keyword: 'velocity pumps',
+                            type: 'primary',
                             frequency: 8,
                             density: '1.5%',
                             in_title: true,
@@ -149,7 +152,8 @@ export const mockProjects: Project[] = [
                 seo_data: {
                     id: 'seo-2',
                     page_id: '1-2',
-                    keywords: ['about velocity', 'pump company', 'manufacturing history'],
+                    primaryKeywords: ['about velocity', 'pump company'],
+                    secondaryKeywords: ['manufacturing history'],
                     uploaded_by: '1',
                     uploaded_at: '2024-01-18T09:00:00Z',
                     version: 1,
@@ -166,7 +170,8 @@ export const mockProjects: Project[] = [
                 seo_data: {
                     id: 'seo-3',
                     page_id: '1-3',
-                    keywords: ['pump products', 'industrial equipment', 'high-pressure systems'],
+                    primaryKeywords: ['pump products', 'industrial equipment'],
+                    secondaryKeywords: ['high-pressure systems'],
                     uploaded_by: '1',
                     uploaded_at: '2024-01-17T10:00:00Z',
                     version: 1,

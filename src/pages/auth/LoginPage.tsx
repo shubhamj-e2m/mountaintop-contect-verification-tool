@@ -52,28 +52,19 @@ const LoginPage: React.FC = () => {
                     <div className="flex gap-2">
                         <button
                             onClick={() => handleRoleSwitch('seo_analyst')}
-                            className={`flex-1 px-3 py-2 text-sm rounded-md transition-smooth ${selectedRole === 'seo_analyst'
-                                ? 'bg-accent text-white'
-                                : 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary'
-                                }`}
+                            className="flex-1 px-3 py-2 text-sm rounded-md transition-smooth bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
                         >
                             SEO Analyst
                         </button>
                         <button
                             onClick={() => handleRoleSwitch('content_writer')}
-                            className={`flex-1 px-3 py-2 text-sm rounded-md transition-smooth ${selectedRole === 'content_writer'
-                                ? 'bg-accent text-white'
-                                : 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary'
-                                }`}
+                            className="flex-1 px-3 py-2 text-sm rounded-md transition-smooth bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
                         >
                             Writer
                         </button>
                         <button
                             onClick={() => handleRoleSwitch('content_verifier')}
-                            className={`flex-1 px-3 py-2 text-sm rounded-md transition-smooth ${selectedRole === 'content_verifier'
-                                ? 'bg-accent text-white'
-                                : 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary'
-                                }`}
+                            className="flex-1 px-3 py-2 text-sm rounded-md transition-smooth bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
                         >
                             Verifier
                         </button>

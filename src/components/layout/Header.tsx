@@ -24,8 +24,8 @@ const Header: React.FC = () => {
     const breadcrumbs = generateBreadcrumbs();
 
     return (
-        <header className="bg-bg-secondary border-b border-border px-6 py-4">
-            <div className="flex items-center justify-between">
+        <header className="bg-bg-secondary border-b border-border px-6 h-14 flex items-center">
+            <div className="flex items-center justify-between w-full">
                 {/* Breadcrumb */}
                 <nav className="flex items-center gap-2 text-sm">
                     {breadcrumbs.map((crumb, index) => (
@@ -34,8 +34,8 @@ const Header: React.FC = () => {
                             <Link
                                 to={crumb.path}
                                 className={`${index === breadcrumbs.length - 1
-                                        ? 'text-text-primary font-medium'
-                                        : 'text-text-secondary hover:text-text-primary'
+                                    ? 'text-text-primary font-medium'
+                                    : 'text-text-secondary hover:text-text-primary'
                                     } transition-smooth`}
                             >
                                 {crumb.label}
