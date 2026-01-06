@@ -218,9 +218,9 @@ const PageDetailPage: React.FC = () => {
     };
 
 
-    // Helper function to highlight keywords for verifier
+    // Helper function to highlight keywords in content
     const highlightKeywords = (text: string): React.ReactElement => {
-        if (!isVerifier || !hasSEO || !page.seo_data) {
+        if (!hasSEO || !page.seo_data) {
             return <>{text}</>;
         }
 
@@ -764,8 +764,8 @@ const PageDetailPage: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Keyword Analysis (only show to verifier when both data exist) */}
-                    {isVerifier && hasSEO && hasContent && keywordAnalysis.length > 0 && (
+                    {/* Keyword Analysis (show to all users when both data exist) */}
+                    {hasSEO && hasContent && keywordAnalysis.length > 0 && (
                         <div className="bg-white border border-[var(--color-border)] rounded-lg overflow-hidden">
                             <div className="bg-yellow-100 text-yellow-800 px-4 py-2 font-medium text-sm">
                                 🔑 Keywords Analysis
