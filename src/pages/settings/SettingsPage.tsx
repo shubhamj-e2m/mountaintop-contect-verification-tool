@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import type { UserRole } from '../../types/user';
 
 const SettingsPage: React.FC = () => {
-    const { user, switchRole } = useAuth();
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'integrations'>('profile');
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
@@ -49,7 +49,7 @@ const SettingsPage: React.FC = () => {
                             {/* Avatar */}
                             <div className="flex items-center gap-4 mb-6">
                                 <img
-                                    src={user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
+                                    src={user?.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'}
                                     alt="Avatar"
                                     className="w-20 h-20 rounded-full"
                                 />
@@ -103,7 +103,7 @@ const SettingsPage: React.FC = () => {
                                         {(['seo_analyst', 'content_writer', 'content_verifier'] as UserRole[]).map((role) => (
                                             <button
                                                 key={role}
-                                                onClick={() => switchRole(role)}
+                                                onClick={() => {/* switchRole not implemented */}}
                                                 className={`px-3 py-1.5 text-sm rounded-md transition-smooth ${user?.role === role
                                                         ? 'bg-[var(--color-accent)] text-white'
                                                         : 'border border-[var(--color-border)] hover:bg-gray-50'

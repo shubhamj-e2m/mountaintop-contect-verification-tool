@@ -102,14 +102,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
             // Only update if we got valid data - keeps the fallback user otherwise
             if (data && !error) {
+                const userData = data as any;
                 setUser({
-                    id: data.id,
-                    email: data.email,
-                    name: data.name,
-                    role: data.role as UserRole,
-                    avatar_url: data.avatar_url || undefined,
-                    created_at: data.created_at,
-                    updated_at: data.updated_at,
+                    id: userData.id,
+                    email: userData.email,
+                    name: userData.name,
+                    role: userData.role as UserRole,
+                    avatar_url: userData.avatar_url || undefined,
+                    created_at: userData.created_at,
+                    updated_at: userData.updated_at,
                 });
             } else if (error) {
                 console.warn('Could not fetch user profile, using fallback:', error.message);

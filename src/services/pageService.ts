@@ -1,8 +1,8 @@
-import { supabase } from '../lib/supabase';
+import { apiClient } from '../lib/apiClient';
 import type { Database } from '../lib/database.types';
 
 type Page = Database['public']['Tables']['pages']['Row'];
-type PageInsert = Database['public']['Tables']['pages']['Insert'];
+// type PageInsert = Database['public']['Tables']['pages']['Insert'];
 type PageUpdate = Database['public']['Tables']['pages']['Update'];
 type PageStatus = Database['public']['Enums']['page_status'];
 
@@ -39,58 +39,68 @@ interface AnalysisBasic {
  * Get all pages for a project
  */
 export async function getPages(projectId: string): Promise<PageWithData[]> {
-    const { data, error } = await supabase
-        .from('pages')
-        .select(`
-            *,
-            seo_data (id, primary_keywords, secondary_keywords, uploaded_by, uploaded_at, version),
-            content_data (id, google_sheet_url, uploaded_by, uploaded_at, version),
-            analysis_results (id, overall_score, processed_at)
-        `)
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: true });
-
-    if (error) {
+    try {
+        const pages = await apiClient.get<Page[]>(`/pages/projects/${projectId}/pages`);
+        
+        // Fetch data for each page
+        const pagesWithData = await Promise.all(pages.map(async (page) => {
+            try {
+                const pageData = await apiClient.get<{
+                    page: Page;
+                    seo_data?: SEODataBasic | null;
+                    content_data?: ContentDataBasic | null;
+                    analysis_results?: AnalysisBasic | null;
+                }>(`/pages/${page.id}`);
+                
+                return {
+                    ...pageData.page,
+                    seo_data: pageData.seo_data || null,
+                    content_data: pageData.content_data || null,
+                    analysis_results: pageData.analysis_results || null,
+                };
+            } catch (error) {
+                console.error(`Error fetching data for page ${page.id}:`, error);
+                return {
+                    ...page,
+                    seo_data: null,
+                    content_data: null,
+                    analysis_results: null,
+                };
+            }
+        }));
+        
+        return pagesWithData;
+    } catch (error) {
         console.error('Error fetching pages:', error);
         throw error;
     }
-
-    return (data || []).map(page => ({
-        ...page,
-        seo_data: page.seo_data?.[0] || null,
-        content_data: page.content_data?.[0] || null,
-        analysis_results: page.analysis_results?.[0] || null,
-    }));
 }
 
 /**
  * Get a single page by ID with all related data
  */
 export async function getPageById(pageId: string): Promise<PageWithData | null> {
-    const { data, error } = await supabase
-        .from('pages')
-        .select(`
-            *,
-            seo_data (*),
-            content_data (*),
-            analysis_results (*),
-            review_comments (*)
-        `)
-        .eq('id', pageId)
-        .single();
-
-    if (error) {
-        if (error.code === 'PGRST116') return null;
+    try {
+        const pageData = await apiClient.get<{
+            page: Page;
+            seo_data?: SEODataBasic | null;
+            content_data?: ContentDataBasic | null;
+            analysis_results?: AnalysisBasic | null;
+        }>(`/pages/${pageId}`);
+        
+        return {
+            ...pageData.page,
+            seo_data: pageData.seo_data || null,
+            content_data: pageData.content_data || null,
+            analysis_results: pageData.analysis_results || null,
+        };
+    } catch (error: any) {
+        if (error.message?.includes('404') || error.message?.includes('not found')) {
+            return null;
+        }
         console.error('Error fetching page:', error);
         throw error;
     }
-
-    return {
-        ...data,
-        seo_data: data?.seo_data?.[0] || null,
-        content_data: data?.content_data?.[0] || null,
-        analysis_results: data?.analysis_results?.[0] || null,
-    };
 }
 
 /**
@@ -101,23 +111,16 @@ export async function createPage(page: {
     name: string;
     slug: string;
 }): Promise<Page> {
-    const { data, error } = await supabase
-        .from('pages')
-        .insert({
-            project_id: page.project_id,
+    try {
+        const data = await apiClient.post<Page>(`/pages/projects/${page.project_id}/pages`, {
             name: page.name,
             slug: page.slug,
-            status: 'draft',
-        })
-        .select()
-        .single();
-
-    if (error) {
+        });
+        return data;
+    } catch (error) {
         console.error('Error creating page:', error);
         throw error;
     }
-
-    return data;
 }
 
 /**
@@ -127,19 +130,13 @@ export async function updatePage(
     pageId: string,
     updates: PageUpdate
 ): Promise<Page> {
-    const { data, error } = await supabase
-        .from('pages')
-        .update(updates)
-        .eq('id', pageId)
-        .select()
-        .single();
-
-    if (error) {
+    try {
+        const data = await apiClient.put<Page>(`/pages/${pageId}`, updates);
+        return data;
+    } catch (error) {
         console.error('Error updating page:', error);
         throw error;
     }
-
-    return data;
 }
 
 /**
@@ -149,19 +146,22 @@ export async function updatePageStatus(
     pageId: string,
     status: PageStatus
 ): Promise<Page> {
-    return updatePage(pageId, { status });
+    try {
+        const data = await apiClient.put<Page>(`/pages/${pageId}/status`, { status });
+        return data;
+    } catch (error) {
+        console.error('Error updating page status:', error);
+        throw error;
+    }
 }
 
 /**
  * Delete a page
  */
 export async function deletePage(pageId: string): Promise<void> {
-    const { error } = await supabase
-        .from('pages')
-        .delete()
-        .eq('id', pageId);
-
-    if (error) {
+    try {
+        await apiClient.delete(`/pages/${pageId}`);
+    } catch (error) {
         console.error('Error deleting page:', error);
         throw error;
     }

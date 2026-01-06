@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, FileText, Tag, CheckCircle, XCircle, RotateCcw, MessageSquare, Loader2 } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, FileText, Tag, CheckCircle, XCircle, RotateCcw, MessageSquare, Loader2, Trash2 } from 'lucide-react';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ScoreDisplay from '../../components/ui/ScoreDisplay';
 import { useAuth } from '../../contexts/AuthContext';
@@ -10,12 +10,14 @@ import { parseContentFile, validateContentFile } from '../../utils/csvParser';
 
 const PageDetailPage: React.FC = () => {
     const { projectId, pageId } = useParams<{ projectId: string; pageId: string }>();
+    const navigate = useNavigate();
     const { user } = useAuth();
-    const { projects, uploadSEOKeywords, uploadContent, approveContent, rejectContent, requestRevision } = useProjectStore();
+    const { projects, uploadSEOKeywords, uploadContent, approveContent, rejectContent, requestRevision, fetchProjectById, deletePage } = useProjectStore();
 
     const [showSEOModal, setShowSEOModal] = useState(false);
     const [showContentModal, setShowContentModal] = useState(false);
     const [showRevisionModal, setShowRevisionModal] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [newComment, setNewComment] = useState('');
 
     // Form state
@@ -30,9 +32,13 @@ const PageDetailPage: React.FC = () => {
     const [sheetUrl, setSheetUrl] = useState('');
     const [revisionSEO, setRevisionSEO] = useState(true);
     const [revisionContent, setRevisionContent] = useState(true);
-    const [isProcessing, setIsProcessing] = useState(false);
     const [keywordMetrics, setKeywordMetrics] = useState<Record<string, any>>({});
     const [csvError, setCsvError] = useState<string>('');
+    const [analysisProgress, setAnalysisProgress] = useState<{
+        step: number;
+        message: string;
+        progress: number;
+    }>({ step: 0, message: 'Starting analysis...', progress: 0 });
 
     const project = projects.find(p => p.id === projectId);
     const page = project?.pages.find(p => p.id === pageId);
@@ -56,6 +62,86 @@ const PageDetailPage: React.FC = () => {
         fetchMetrics();
     }, [page?.seo_data?.id]);
 
+    // Poll for analysis completion when status is processing or pending_review but analysis not loaded
+    // Also poll if analysis exists but status is still 'processing' (edge case)
+    useEffect(() => {
+        const isProcessing = page?.status === 'processing';
+        const hasAnalysisButStillProcessing = isProcessing && page?.analysis;
+        const needsPolling = isProcessing && !page?.analysis;
+        const isPendingReviewWithoutAnalysis = page?.status === 'pending_review' && !page.analysis;
+
+        if (needsPolling || isPendingReviewWithoutAnalysis || hasAnalysisButStillProcessing) {
+            // If analysis exists but status is stuck at processing, just poll to refresh
+            if (hasAnalysisButStillProcessing) {
+                const pollInterval = setInterval(async () => {
+                    try {
+                        if (projectId) {
+                            await fetchProjectById(projectId);
+                        }
+                    } catch (error) {
+                        console.error('Error polling for status update:', error);
+                    }
+                }, 2000);
+                return () => clearInterval(pollInterval);
+            }
+
+            // Simulate progress steps (only for processing status)
+            if (isProcessing) {
+                const progressSteps = [
+                    { step: 1, message: 'Preparing content data...', progress: 10 },
+                    { step: 2, message: 'Analyzing SEO keywords...', progress: 30 },
+                    { step: 3, message: 'Running AI analysis...', progress: 50 },
+                    { step: 4, message: 'Calculating scores...', progress: 70 },
+                    { step: 5, message: 'Generating suggestions...', progress: 85 },
+                    { step: 6, message: 'Finalizing results...', progress: 95 },
+                ];
+
+                let currentStep = 0;
+                const progressInterval = setInterval(() => {
+                    if (currentStep < progressSteps.length) {
+                        setAnalysisProgress(progressSteps[currentStep]);
+                        currentStep++;
+                    }
+                }, 2000); // Update every 2 seconds
+
+                // Poll for actual analysis completion
+                const pollInterval = setInterval(async () => {
+                    try {
+                        // Refresh project data to check if analysis is complete
+                        if (projectId) {
+                            await fetchProjectById(projectId);
+                        }
+                    } catch (error) {
+                        console.error('Error polling for analysis:', error);
+                    }
+                }, 3000); // Poll every 3 seconds
+
+                return () => {
+                    clearInterval(progressInterval);
+                    clearInterval(pollInterval);
+                };
+            } else {
+                // Status is pending_review but analysis not loaded - just poll to refresh
+                const pollInterval = setInterval(async () => {
+                    try {
+                        if (projectId) {
+                            await fetchProjectById(projectId);
+                        }
+                    } catch (error) {
+                        console.error('Error polling for analysis:', error);
+                    }
+                }, 2000); // Poll more frequently when waiting for results
+
+                return () => {
+                    clearInterval(pollInterval);
+                };
+            }
+        } else if (page?.analysis) {
+            // Analysis complete, reset progress
+            setAnalysisProgress({ step: 6, message: 'Analysis complete!', progress: 100 });
+        }
+    }, [page?.status, page?.analysis, projectId, fetchProjectById]);
+
     if (!project || !page) {
         return (
             <div className="p-8">
@@ -72,6 +158,37 @@ const PageDetailPage: React.FC = () => {
     const isSEOAnalyst = user?.role === 'seo_analyst';
     const isAdmin = user?.role === 'admin';
 
+    // Check which content fields are missing
+    const getMissingContentFields = () => {
+        if (!hasContent || !page.content_data) return [];
+
+        const content = page.content_data.parsed_content;
+        const missing: string[] = [];
+
+        if (!content.meta_title || !content.meta_title.trim()) {
+            missing.push('Meta Title');
+        }
+        if (!content.meta_description || !content.meta_description.trim()) {
+            missing.push('Meta Description');
+        }
+        if (!content.h1 || !Array.isArray(content.h1) || content.h1.length === 0 || !content.h1.some(h => h && h.trim())) {
+            missing.push('H1 Heading');
+        }
+        if (!content.h2 || !Array.isArray(content.h2) || content.h2.length === 0 || !content.h2.some(h => h && h.trim())) {
+            missing.push('H2 Headings');
+        }
+        if (!content.h3 || !Array.isArray(content.h3) || content.h3.length === 0 || !content.h3.some(h => h && h.trim())) {
+            missing.push('H3 Headings');
+        }
+        if (!content.paragraphs || !Array.isArray(content.paragraphs) || content.paragraphs.length === 0 || !content.paragraphs.some(p => p && p.trim())) {
+            missing.push('Paragraphs');
+        }
+
+        return missing;
+    };
+
+    const missingContentFields = getMissingContentFields();
+
     // Helper function to convert percentage to letter grade
     const getLetterGrade = (score: number): { grade: string; color: string } => {
         if (score >= 90) return { grade: 'A', color: 'text-green-600' };
@@ -81,7 +198,7 @@ const PageDetailPage: React.FC = () => {
         return { grade: 'F', color: 'text-red-600' };
     };
 
-    // Get keyword stats - use real data if available, otherwise mock
+    // Get keyword stats - only return real data, null if not available
     const getKeywordStats = (keyword: string) => {
         const realMetrics = keywordMetrics[keyword.toLowerCase()];
 
@@ -93,22 +210,13 @@ const PageDetailPage: React.FC = () => {
                 competition: realMetrics.competition || 'N/A',
                 lowBid: realMetrics.low_top_of_page_bid?.toFixed(2) || '0.00',
                 highBid: realMetrics.high_top_of_page_bid?.toFixed(2) || '0.00',
-                isReal: true
             };
         }
 
-        // Fallback to mock data if no real metrics
-        const hash = keyword.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-        return {
-            searchVolume: Math.floor((hash % 50) * 100 + 500),
-            difficulty: Math.floor(hash % 100),
-            cpc: ((hash % 50) / 10 + 0.5).toFixed(2),
-            competition: ['LOW', 'MEDIUM', 'HIGH'][Math.floor(hash % 3)],
-            lowBid: ((hash % 20) / 10).toFixed(2),
-            highBid: ((hash % 50) / 10 + 2).toFixed(2),
-            isReal: false
-        };
+        // No real metrics available
+        return null;
     };
+
 
     // Helper function to highlight keywords for verifier
     const highlightKeywords = (text: string): React.ReactElement => {
@@ -230,8 +338,6 @@ const PageDetailPage: React.FC = () => {
         setShowSEOModal(false);
 
         if (hasContent) {
-            setIsProcessing(true);
-            setTimeout(() => setIsProcessing(false), 2500);
         }
     };
 
@@ -261,8 +367,6 @@ const PageDetailPage: React.FC = () => {
         setShowContentModal(false);
 
         if (hasSEO) {
-            setIsProcessing(true);
-            setTimeout(() => setIsProcessing(false), 2500);
         }
     };
 
@@ -315,26 +419,16 @@ const PageDetailPage: React.FC = () => {
         }
     };
 
-    // Processing State
-    if (isProcessing || page.status === 'processing') {
-        return (
-            <div className="p-8">
-                <Link
-                    to={`/projects/${projectId}`}
-                    className="inline-flex items-center gap-1 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] mb-4"
-                >
-                    <ArrowLeft size={16} />
-                    Back to {project.name}
-                </Link>
-
-                <div className="bg-white border border-[var(--color-border)] rounded-lg p-12 text-center">
-                    <Loader2 size={48} className="animate-spin text-[var(--color-accent)] mx-auto mb-4" />
-                    <h2 className="text-xl font-semibold mb-2">Analyzing Content...</h2>
-                    <p className="text-[var(--color-text-secondary)]">Our AI is processing your SEO keywords and content. This usually takes a few seconds.</p>
-                </div>
-            </div>
-        );
-    }
+    // Handle page deletion
+    const handleDeletePage = async () => {
+        if (!projectId || !pageId) return;
+        try {
+            await deletePage(projectId, pageId);
+            navigate(`/projects/${projectId}`);
+        } catch (error) {
+            console.error('Error deleting page:', error);
+        }
+    };
 
     return (
         <div className="p-8">
@@ -353,7 +447,38 @@ const PageDetailPage: React.FC = () => {
                     <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">{page.name}</h1>
                     <p className="text-sm text-[var(--color-text-tertiary)]">/{page.slug}</p>
                 </div>
-                <StatusBadge status={page.status} />
+                <div className="flex items-center gap-3">
+                    <StatusBadge status={page.status} />
+                    {isAdmin && (
+                        <>
+                            {showDeleteConfirm ? (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-red-600">Delete page?</span>
+                                    <button
+                                        onClick={handleDeletePage}
+                                        className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700"
+                                    >
+                                        Yes, Delete
+                                    </button>
+                                    <button
+                                        onClick={() => setShowDeleteConfirm(false)}
+                                        className="px-3 py-1.5 text-sm bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                                    title="Delete page"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            )}
+                        </>
+                    )}
+                </div>
             </div>
 
             {/* Main Content Grid */}
@@ -385,9 +510,14 @@ const PageDetailPage: React.FC = () => {
                             <div className="space-y-4">
                                 {/* Primary Keywords */}
                                 <div>
-                                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Primary Keywords</p>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Primary Keywords</p>
+                                        {(!page.seo_data!.primaryKeywords || page.seo_data!.primaryKeywords.length === 0) && (isSEOAnalyst || isAdmin) && (
+                                            <span className="text-xs text-orange-600 font-medium">⚠️ Pending</span>
+                                        )}
+                                    </div>
                                     <div className="flex flex-wrap gap-2">
-                                        {page.seo_data!.primaryKeywords.map((kw: string, i: number) => {
+                                        {(page.seo_data!.primaryKeywords || []).map((kw: string, i: number) => {
                                             const stats = getKeywordStats(kw);
                                             return (
                                                 <div key={i} className="relative group">
@@ -397,31 +527,49 @@ const PageDetailPage: React.FC = () => {
                                                     {/* Tooltip */}
                                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50">
                                                         <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg min-w-[180px]">
-                                                            <div className="space-y-1.5">
-                                                                <div className="flex justify-between"><span className="text-gray-400">Volume:</span> <span className="font-medium">{stats.searchVolume.toLocaleString()}/mo</span></div>
-                                                                <div className="flex justify-between"><span className="text-gray-400">Difficulty:</span> <span className={`font-medium ${stats.difficulty > 70 ? 'text-red-400' : stats.difficulty > 40 ? 'text-yellow-400' : 'text-green-400'}`}>{stats.difficulty}%</span></div>
-                                                                <div className="flex justify-between"><span className="text-gray-400">CPC:</span> <span className="font-medium">${stats.cpc}</span></div>
-                                                                <div className="flex justify-between"><span className="text-gray-400">Competition:</span> <span className={`font-medium ${stats.competition === 'HIGH' ? 'text-red-400' : stats.competition === 'MEDIUM' ? 'text-yellow-400' : 'text-green-400'}`}>{stats.competition}</span></div>
-                                                                <div className="flex justify-between"><span className="text-gray-400">Bid Range:</span> <span className="font-medium">${stats.lowBid} - ${stats.highBid}</span></div>
-                                                                {!stats.isReal && <div className="text-xs text-gray-500 italic mt-1">* Mock data</div>}
-                                                            </div>
+                                                            {stats ? (
+                                                                <div className="space-y-1.5">
+                                                                    <div className="flex justify-between"><span className="text-gray-400">Volume:</span> <span className="font-medium">{stats.searchVolume.toLocaleString()}/mo</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-400">Difficulty:</span> <span className={`font-medium ${stats.difficulty > 70 ? 'text-red-400' : stats.difficulty > 40 ? 'text-yellow-400' : 'text-green-400'}`}>{stats.difficulty}%</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-400">CPC:</span> <span className="font-medium">${stats.cpc}</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-400">Competition:</span> <span className={`font-medium ${stats.competition === 'HIGH' ? 'text-red-400' : stats.competition === 'MEDIUM' ? 'text-yellow-400' : 'text-green-400'}`}>{stats.competition}</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-400">Bid Range:</span> <span className="font-medium">${stats.lowBid} - ${stats.highBid}</span></div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-center py-2">
+                                                                    <div className="text-yellow-400 font-medium">⏳ Analysis Pending</div>
+                                                                    <div className="text-gray-400 text-xs mt-1">Keyword metrics will be available soon</div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 bg-gray-900 rotate-45"></div>
                                                     </div>
                                                 </div>
                                             );
                                         })}
-                                        {page.seo_data!.primaryKeywords.length === 0 && (
-                                            <span className="text-sm text-gray-400 italic">None specified</span>
+                                        {(!page.seo_data!.primaryKeywords || page.seo_data!.primaryKeywords.length === 0) && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-gray-400 italic">None specified</span>
+                                                {(isSEOAnalyst || isAdmin) && (
+                                                    <span className="text-xs text-orange-600 font-medium bg-orange-50 px-2 py-1 rounded">
+                                                        Primary Keywords Pending
+                                                    </span>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
 
                                 {/* Secondary Keywords */}
                                 <div>
-                                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Secondary Keywords</p>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Secondary Keywords</p>
+                                        {(!page.seo_data!.secondaryKeywords || page.seo_data!.secondaryKeywords.length === 0) && (isSEOAnalyst || isAdmin) && (
+                                            <span className="text-xs text-orange-600 font-medium">⚠️ Pending</span>
+                                        )}
+                                    </div>
                                     <div className="flex flex-wrap gap-2">
-                                        {page.seo_data!.secondaryKeywords.map((kw: string, i: number) => {
+                                        {(page.seo_data!.secondaryKeywords || []).map((kw: string, i: number) => {
                                             const stats = getKeywordStats(kw);
                                             return (
                                                 <div key={i} className="relative group">
@@ -431,22 +579,35 @@ const PageDetailPage: React.FC = () => {
                                                     {/* Tooltip */}
                                                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50">
                                                         <div className="bg-gray-900 text-white text-xs rounded-lg p-3 shadow-lg min-w-[180px]">
-                                                            <div className="space-y-1.5">
-                                                                <div className="flex justify-between"><span className="text-gray-400">Volume:</span> <span className="font-medium">{stats.searchVolume.toLocaleString()}/mo</span></div>
-                                                                <div className="flex justify-between"><span className="text-gray-400">Difficulty:</span> <span className={`font-medium ${stats.difficulty > 70 ? 'text-red-400' : stats.difficulty > 40 ? 'text-yellow-400' : 'text-green-400'}`}>{stats.difficulty}%</span></div>
-                                                                <div className="flex justify-between"><span className="text-gray-400">CPC:</span> <span className="font-medium">${stats.cpc}</span></div>
-                                                                <div className="flex justify-between"><span className="text-gray-400">Competition:</span> <span className={`font-medium ${stats.competition === 'HIGH' ? 'text-red-400' : stats.competition === 'MEDIUM' ? 'text-yellow-400' : 'text-green-400'}`}>{stats.competition}</span></div>
-                                                                <div className="flex justify-between"><span className="text-gray-400">Bid Range:</span> <span className="font-medium">${stats.lowBid} - ${stats.highBid}</span></div>
-                                                                {!stats.isReal && <div className="text-xs text-gray-500 italic mt-1">* Mock data</div>}
-                                                            </div>
+                                                            {stats ? (
+                                                                <div className="space-y-1.5">
+                                                                    <div className="flex justify-between"><span className="text-gray-400">Volume:</span> <span className="font-medium">{stats.searchVolume.toLocaleString()}/mo</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-400">Difficulty:</span> <span className={`font-medium ${stats.difficulty > 70 ? 'text-red-400' : stats.difficulty > 40 ? 'text-yellow-400' : 'text-green-400'}`}>{stats.difficulty}%</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-400">CPC:</span> <span className="font-medium">${stats.cpc}</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-400">Competition:</span> <span className={`font-medium ${stats.competition === 'HIGH' ? 'text-red-400' : stats.competition === 'MEDIUM' ? 'text-yellow-400' : 'text-green-400'}`}>{stats.competition}</span></div>
+                                                                    <div className="flex justify-between"><span className="text-gray-400">Bid Range:</span> <span className="font-medium">${stats.lowBid} - ${stats.highBid}</span></div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-center py-2">
+                                                                    <div className="text-yellow-400 font-medium">⏳ Analysis Pending</div>
+                                                                    <div className="text-gray-400 text-xs mt-1">Keyword metrics will be available soon</div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                         <div className="absolute left-1/2 -translate-x-1/2 -bottom-1 w-2 h-2 bg-gray-900 rotate-45"></div>
                                                     </div>
                                                 </div>
                                             );
                                         })}
-                                        {page.seo_data!.secondaryKeywords.length === 0 && (
-                                            <span className="text-sm text-gray-400 italic">None specified</span>
+                                        {(!page.seo_data!.secondaryKeywords || page.seo_data!.secondaryKeywords.length === 0) && (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm text-gray-400 italic">None specified</span>
+                                                {(isSEOAnalyst || isAdmin) && (
+                                                    <span className="text-xs text-orange-600 font-medium bg-orange-50 px-2 py-1 rounded">
+                                                        Secondary Keywords Pending
+                                                    </span>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -761,6 +922,28 @@ const PageDetailPage: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
+                                {hasSEO && (isSEOAnalyst || isAdmin) && (
+                                    <>
+                                        {(!page.seo_data!.primaryKeywords || page.seo_data!.primaryKeywords.length === 0) && (
+                                            <div className="flex items-start gap-3 p-3 bg-orange-50 border border-orange-200 rounded-md">
+                                                <Tag size={20} className="text-orange-600 shrink-0 mt-0.5" />
+                                                <div>
+                                                    <p className="font-medium text-orange-800 text-sm">Primary Keywords Pending</p>
+                                                    <p className="text-xs text-orange-600 mt-0.5">SEO Analyst needs to add primary keywords</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {(!page.seo_data!.secondaryKeywords || page.seo_data!.secondaryKeywords.length === 0) && (
+                                            <div className="flex items-start gap-3 p-3 bg-orange-50 border border-orange-200 rounded-md">
+                                                <Tag size={20} className="text-orange-600 shrink-0 mt-0.5" />
+                                                <div>
+                                                    <p className="font-medium text-orange-800 text-sm">Secondary Keywords Pending</p>
+                                                    <p className="text-xs text-orange-600 mt-0.5">SEO Analyst needs to add secondary keywords</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
                                 {!hasContent && (
                                     <div className="flex items-start gap-3 p-3 bg-purple-50 border border-purple-200 rounded-md">
                                         <FileText size={20} className="text-purple-600 shrink-0 mt-0.5" />
@@ -770,12 +953,86 @@ const PageDetailPage: React.FC = () => {
                                         </div>
                                     </div>
                                 )}
-                                {hasSEO && hasContent && (
+                                {hasContent && (isContentWriter || isAdmin) && missingContentFields.length > 0 && (
+                                    <>
+                                        {missingContentFields.map((field) => (
+                                            <div key={field} className="flex items-start gap-3 p-3 bg-orange-50 border border-orange-200 rounded-md">
+                                                <FileText size={20} className="text-orange-600 shrink-0 mt-0.5" />
+                                                <div>
+                                                    <p className="font-medium text-orange-800 text-sm">{field} Pending</p>
+                                                    <p className="text-xs text-orange-600 mt-0.5">Content Writer needs to add {field.toLowerCase()}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                                {(page.status as string) === 'processing' && (
+                                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-md">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <Loader2 size={20} className="text-blue-600 shrink-0 animate-spin" />
+                                            <div className="flex-1">
+                                                <p className="font-medium text-blue-800 text-sm">Analyzing Content...</p>
+                                                <p className="text-xs text-blue-600 mt-0.5">{analysisProgress.message}</p>
+                                            </div>
+                                            <span className="text-xs font-medium text-blue-700">{analysisProgress.progress}%</span>
+                                        </div>
+
+                                        {/* Progress Bar */}
+                                        <div className="w-full bg-blue-100 rounded-full h-2 mb-3">
+                                            <div
+                                                className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-out"
+                                                style={{ width: `${analysisProgress.progress}%` }}
+                                            />
+                                        </div>
+
+                                        {/* Progress Steps */}
+                                        <div className="space-y-2">
+                                            {[
+                                                { step: 1, label: 'Preparing content data', icon: FileText },
+                                                { step: 2, label: 'Analyzing SEO keywords', icon: Tag },
+                                                { step: 3, label: 'Running AI analysis', icon: Loader2 },
+                                                { step: 4, label: 'Calculating scores', icon: CheckCircle },
+                                                { step: 5, label: 'Generating suggestions', icon: MessageSquare },
+                                                { step: 6, label: 'Finalizing results', icon: CheckCircle },
+                                            ].map((stepInfo) => {
+                                                const isActive = analysisProgress.step >= stepInfo.step;
+                                                const isCurrent = analysisProgress.step === stepInfo.step;
+
+                                                return (
+                                                    <div
+                                                        key={stepInfo.step}
+                                                        className={`flex items-center gap-2 text-xs ${isActive ? 'text-blue-800' : 'text-blue-400'
+                                                            }`}
+                                                    >
+                                                        {isCurrent ? (
+                                                            <Loader2 size={14} className="animate-spin shrink-0" />
+                                                        ) : isActive ? (
+                                                            <CheckCircle size={14} className="shrink-0" />
+                                                        ) : (
+                                                            <stepInfo.icon size={14} className="shrink-0" />
+                                                        )}
+                                                        <span className={isActive ? 'font-medium' : ''}>{stepInfo.label}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                {hasSEO && hasContent && !hasAnalysis && (page.status as string) !== 'processing' && (page.status as string) !== 'pending_review' && (
                                     <div className="flex items-start gap-3 p-3 bg-gray-50 border border-gray-200 rounded-md">
-                                        <Loader2 size={20} className="text-gray-600 shrink-0 mt-0.5" />
+                                        <Loader2 size={20} className="text-gray-600 shrink-0 mt-0.5 animate-spin" />
                                         <div>
-                                            <p className="font-medium text-gray-800 text-sm">Analysis Pending</p>
-                                            <p className="text-xs text-gray-600 mt-0.5">Both data uploaded, waiting for processing</p>
+                                            <p className="font-medium text-gray-800 text-sm">Analysis Starting...</p>
+                                            <p className="text-xs text-gray-600 mt-0.5">Both data uploaded, analysis will begin shortly</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {hasSEO && hasContent && !hasAnalysis && (page.status as string) === 'pending_review' && (
+                                    <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                        <Loader2 size={20} className="text-blue-600 shrink-0 mt-0.5 animate-spin" />
+                                        <div>
+                                            <p className="font-medium text-blue-800 text-sm">Analysis Complete - Refreshing...</p>
+                                            <p className="text-xs text-blue-600 mt-0.5">Analysis finished, loading results...</p>
                                         </div>
                                     </div>
                                 )}
@@ -861,24 +1118,24 @@ const PageDetailPage: React.FC = () => {
             {/* Content Upload Modal */}
             {
                 showContentModal && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-8">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-lg mx-4">
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-4">
+                        <div className="bg-white rounded-lg p-6 w-full max-w-7xl mx-4 my-4">
                             <h2 className="text-xl font-semibold mb-4">Upload Page Content</h2>
                             <form onSubmit={handleContentUpload} className="space-y-4">
                                 {/* File Upload Section */}
                                 <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-lg p-4">
                                     <p className="text-sm font-medium text-blue-800 mb-2">📄 Upload CSV or Excel File</p>
-                                    <input
-                                        type="file"
-                                        accept=".csv,.xlsx,.xls"
-                                        onChange={handleCSVUpload}
-                                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer"
-                                    />
-                                    <div className="flex gap-4 mt-2">
+                                    <div className="flex gap-4 items-end">
+                                        <input
+                                            type="file"
+                                            accept=".csv,.xlsx,.xls"
+                                            onChange={handleCSVUpload}
+                                            className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer"
+                                        />
                                         <a
                                             href="/sample_content_template.csv"
                                             download
-                                            className="text-xs text-blue-600 hover:underline"
+                                            className="text-xs text-blue-600 hover:underline whitespace-nowrap"
                                         >
                                             ⬇️ Download CSV template
                                         </a>
@@ -900,68 +1157,77 @@ const PageDetailPage: React.FC = () => {
                                 <div className="border-t border-[var(--color-border)] pt-4">
                                     <p className="text-sm font-medium mb-3">Or enter content manually:</p>
 
-                                    <div className="space-y-3">
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">Meta Title</label>
-                                            <input
-                                                type="text"
-                                                placeholder="Page title for search engines"
-                                                value={contentMetaTitle}
-                                                onChange={(e) => setContentMetaTitle(e.target.value)}
-                                                className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                            />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {/* Left Column */}
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Meta Title</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Page title for search engines"
+                                                    value={contentMetaTitle}
+                                                    onChange={(e) => setContentMetaTitle(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Meta Description</label>
+                                                <textarea
+                                                    rows={3}
+                                                    placeholder="Brief description for search results"
+                                                    value={contentMetaDesc}
+                                                    onChange={(e) => setContentMetaDesc(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">H1 Heading *</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Main page heading"
+                                                    value={contentH1}
+                                                    onChange={(e) => setContentH1(e.target.value)}
+                                                    required
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">Meta Description</label>
-                                            <textarea
-                                                rows={2}
-                                                placeholder="Brief description for search results"
-                                                value={contentMetaDesc}
-                                                onChange={(e) => setContentMetaDesc(e.target.value)}
-                                                className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                            />
+
+                                        {/* Right Column */}
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">H2 Headings (one per line)</label>
+                                                <textarea
+                                                    rows={3}
+                                                    placeholder="Section heading 1&#10;Section heading 2"
+                                                    value={contentH2s}
+                                                    onChange={(e) => setContentH2s(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">H3 Headings (one per line)</label>
+                                                <textarea
+                                                    rows={3}
+                                                    placeholder="Sub heading 1&#10;Sub heading 2"
+                                                    value={contentH3s}
+                                                    onChange={(e) => setContentH3s(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">H1 Heading *</label>
-                                            <input
-                                                type="text"
-                                                placeholder="Main page heading"
-                                                value={contentH1}
-                                                onChange={(e) => setContentH1(e.target.value)}
-                                                required
-                                                className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">H2 Headings (one per line)</label>
-                                            <textarea
-                                                rows={3}
-                                                placeholder="Section heading 1&#10;Section heading 2"
-                                                value={contentH2s}
-                                                onChange={(e) => setContentH2s(e.target.value)}
-                                                className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">H3 Headings (one per line)</label>
-                                            <textarea
-                                                rows={2}
-                                                placeholder="Sub heading 1&#10;Sub heading 2"
-                                                value={contentH3s}
-                                                onChange={(e) => setContentH3s(e.target.value)}
-                                                className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">Body Content (paragraphs separated by blank line)</label>
-                                            <textarea
-                                                rows={4}
-                                                placeholder="First paragraph...&#10;&#10;Second paragraph..."
-                                                value={contentParagraphs}
-                                                onChange={(e) => setContentParagraphs(e.target.value)}
-                                                className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                            />
-                                        </div>
+                                    </div>
+
+                                    {/* Body Content - Full Width */}
+                                    <div className="mt-3">
+                                        <label className="block text-sm font-medium mb-1">Body Content (paragraphs separated by blank line)</label>
+                                        <textarea
+                                            rows={4}
+                                            placeholder="First paragraph...&#10;&#10;Second paragraph..."
+                                            value={contentParagraphs}
+                                            onChange={(e) => setContentParagraphs(e.target.value)}
+                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                        />
                                     </div>
                                 </div>
 
