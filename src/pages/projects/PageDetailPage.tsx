@@ -808,7 +808,12 @@ const PageDetailPage: React.FC = () => {
                                 <div className="space-y-3">
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
-                                            <span>SEO Score</span>
+                                            <span className="group relative cursor-help">
+                                                SEO Score
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    Measures keyword placement in title, meta description, H1-H3 headings, and overall keyword optimization.
+                                                </span>
+                                            </span>
                                             <span className="font-medium">{page.analysis?.seo_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
@@ -817,7 +822,12 @@ const PageDetailPage: React.FC = () => {
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
-                                            <span>Readability</span>
+                                            <span className="group relative cursor-help">
+                                                Readability
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    Based on sentence length, word complexity, paragraph structure, and overall reading ease (Flesch-Kincaid).
+                                                </span>
+                                            </span>
                                             <span className={`font-bold ${getLetterGrade(page.analysis?.readability_score ?? 0).color}`}>
                                                 Grade {getLetterGrade(page.analysis?.readability_score ?? 0).grade} ({page.analysis?.readability_score ?? 0}%)
                                             </span>
@@ -825,7 +835,12 @@ const PageDetailPage: React.FC = () => {
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
-                                            <span>Keyword Density</span>
+                                            <span className="group relative cursor-help">
+                                                Keyword Density
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    Evaluates keyword frequency and distribution. Optimal density is 1-3% for primary keywords to avoid over-optimization.
+                                                </span>
+                                            </span>
                                             <span className="font-medium">{page.analysis?.keyword_density_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
@@ -834,7 +849,12 @@ const PageDetailPage: React.FC = () => {
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
-                                            <span>Grammar</span>
+                                            <span className="group relative cursor-help">
+                                                Grammar
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    Checks for grammatical errors, spelling mistakes, punctuation issues, and sentence structure quality.
+                                                </span>
+                                            </span>
                                             <span className="font-medium">{page.analysis?.grammar_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
@@ -843,7 +863,12 @@ const PageDetailPage: React.FC = () => {
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
-                                            <span>Content Intent</span>
+                                            <span className="group relative cursor-help">
+                                                Content Intent
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    Measures how well content aligns with search intent - informational, navigational, transactional, or commercial.
+                                                </span>
+                                            </span>
                                             <span className="font-medium">{page.analysis?.content_intent_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
@@ -852,7 +877,12 @@ const PageDetailPage: React.FC = () => {
                                     </div>
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
-                                            <span>Technical Health</span>
+                                            <span className="group relative cursor-help">
+                                                Technical Health
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    Evaluates heading hierarchy, meta tag lengths, content structure, and technical SEO best practices.
+                                                </span>
+                                            </span>
                                             <span className="font-medium">{page.analysis?.technical_health_score ?? 0}%</span>
                                         </div>
                                         <div className="w-full bg-gray-100 rounded-full h-2">
