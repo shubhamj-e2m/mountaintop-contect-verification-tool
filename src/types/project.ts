@@ -43,6 +43,7 @@ export interface Page {
     name: string; // e.g., "Home Page", "About Us"
     slug: string; // e.g., "home", "about"
     status: PageStatus;
+    error_message?: string | null;
     seo_data?: SEOData;
     content_data?: ContentData;
     analysis?: AnalysisResult;

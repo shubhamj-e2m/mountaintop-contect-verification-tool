@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useProjectStore } from '../../stores/projectStore';
 import { getKeywordMetrics } from '../../services/seoService';
 import { triggerAnalysis } from '../../services/pageService';
+import { addReviewComment, getReviewComments, type ReviewComment } from '../../services/reviewService';
 import { parseContentFile, validateContentFile } from '../../utils/csvParser';
 
 const PageDetailPage: React.FC = () => {
@@ -41,6 +42,8 @@ const PageDetailPage: React.FC = () => {
         progress: number;
     }>({ step: 0, message: 'Starting analysis...', progress: 0 });
     const [isRerunning, setIsRerunning] = useState(false);
+    const [comments, setComments] = useState<ReviewComment[]>([]);
+    const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
     const project = projects.find(p => p.id === projectId);
     const page = project?.pages.find(p => p.id === pageId);
@@ -144,6 +147,37 @@ const PageDetailPage: React.FC = () => {
             setAnalysisProgress({ step: 6, message: 'Analysis complete!', progress: 100 });
         }
     }, [page?.status, page?.analysis, projectId, fetchProjectById]);
+
+    // Fetch comments when page loads
+    useEffect(() => {
+        const fetchComments = async () => {
+            if (pageId) {
+                try {
+                    const fetchedComments = await getReviewComments(pageId);
+                    setComments(fetchedComments);
+                } catch (error) {
+                    console.error('Error fetching comments:', error);
+                }
+            }
+        };
+        fetchComments();
+    }, [pageId]);
+
+    // Handle comment submission
+    const handleSubmitComment = async () => {
+        if (!newComment.trim() || !pageId || isSubmittingComment) return;
+
+        setIsSubmittingComment(true);
+        try {
+            const comment = await addReviewComment(pageId, newComment.trim());
+            setComments(prev => [...prev, comment]);
+            setNewComment('');
+        } catch (error) {
+            console.error('Error submitting comment:', error);
+        } finally {
+            setIsSubmittingComment(false);
+        }
+    };
 
     if (!project || !page) {
         return (
@@ -498,6 +532,38 @@ const PageDetailPage: React.FC = () => {
                     )}
                 </div>
             </div>
+
+            {/* Error Alert - shows when there's an error message from failed analysis */}
+            {page.error_message && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0">
+                            <XCircle size={20} className="text-red-600" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-sm font-medium text-red-800">Analysis Failed</h3>
+                            <p className="mt-1 text-sm text-red-700">{page.error_message}</p>
+                            <button
+                                onClick={handleRerunAnalysis}
+                                disabled={isRerunning}
+                                className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                            >
+                                {isRerunning ? (
+                                    <>
+                                        <Loader2 size={14} className="animate-spin" />
+                                        Retrying...
+                                    </>
+                                ) : (
+                                    <>
+                                        <RefreshCw size={14} />
+                                        Retry Analysis
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1117,15 +1183,39 @@ const PageDetailPage: React.FC = () => {
                                 placeholder="Add a comment..."
                                 value={newComment}
                                 onChange={(e) => setNewComment(e.target.value)}
-                                className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                onKeyDown={(e) => e.key === 'Enter' && handleSubmitComment()}
+                                disabled={isSubmittingComment}
+                                className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] disabled:opacity-50"
                             />
-                            <button className="px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 transition-smooth">
-                                Send
+                            <button
+                                onClick={handleSubmitComment}
+                                disabled={isSubmittingComment || !newComment.trim()}
+                                className="px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 transition-smooth disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {isSubmittingComment ? (
+                                    <>
+                                        <Loader2 size={14} className="animate-spin" />
+                                        Sending...
+                                    </>
+                                ) : (
+                                    'Send'
+                                )}
                             </button>
                         </div>
 
                         <div className="space-y-4">
-                            <p className="text-sm text-[var(--color-text-tertiary)] text-center py-4">No comments yet</p>
+                            {comments.length > 0 ? (
+                                comments.map((comment) => (
+                                    <div key={comment.id} className="border-l-2 border-[var(--color-accent)] pl-4 py-2">
+                                        <p className="text-sm text-[var(--color-text-primary)]">{comment.comment}</p>
+                                        <p className="text-xs text-[var(--color-text-tertiary)] mt-1">
+                                            {new Date(comment.created_at).toLocaleString()}
+                                        </p>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-sm text-[var(--color-text-tertiary)] text-center py-4">No comments yet</p>
+                            )}
                         </div>
                     </div>
                 )
