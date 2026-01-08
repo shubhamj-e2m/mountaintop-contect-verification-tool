@@ -9,20 +9,25 @@ import {
 } from '../services/projectService';
 import {
     getPages,
-    getPageById,
+    // getPageById,
     createPage as createPageAPI,
-    updatePage as updatePageAPI,
+    // updatePage as updatePageAPI,
     updatePageStatus as updatePageStatusAPI,
     deletePage as deletePageAPI,
 } from '../services/pageService';
 import {
     uploadSEOData as uploadSEODataAPI,
-    getSEOData,
+    // getSEOData,
 } from '../services/seoService';
 import {
     uploadContentData as uploadContentDataAPI,
     type ParsedContent,
 } from '../services/contentService';
+import {
+    approvePage as approvePageAPI,
+    rejectPage as rejectPageAPI,
+    requestRevision as requestRevisionAPI,
+} from '../services/reviewService';
 
 interface ProjectState {
     projects: Project[];
@@ -320,39 +325,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     uploadSEOKeywords: async (projectId, pageId, primaryKeywords, secondaryKeywords) => {
         set({ isLoading: true, error: null });
         try {
-            const seoData = await uploadSEODataAPI({
+            await uploadSEODataAPI({
                 page_id: pageId,
                 primary_keywords: primaryKeywords,
                 secondary_keywords: secondaryKeywords,
             });
 
-            set((state) => ({
-                projects: state.projects.map((p) =>
-                    p.id === projectId
-                        ? {
-                            ...p,
-                            pages: p.pages?.map((page) =>
-                                page.id === pageId
-                                    ? {
-                                        ...page,
-                                        status: 'awaiting_content' as PageStatus,
-                                        seo_data: {
-                                            id: seoData.id,
-                                            page_id: pageId,
-                                            primaryKeywords: seoData.primary_keywords,
-                                            secondaryKeywords: seoData.secondary_keywords,
-                                            uploaded_by: seoData.uploaded_by,
-                                            uploaded_at: seoData.uploaded_at,
-                                            version: seoData.version,
-                                        },
-                                    }
-                                    : page
-                            ),
-                        }
-                        : p
-                ),
-                isLoading: false,
-            }));
+            // Re-fetch the project to get the correct status from backend
+            // The backend may have triggered analysis and set status to 'processing'
+            await get().fetchProjectById(projectId);
+            set({ isLoading: false });
         } catch (error: any) {
             console.error('Error uploading SEO keywords:', error);
             set({ error: error.message, isLoading: false });
@@ -362,44 +344,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     uploadContent: async (projectId, pageId, parsedContent, sheetUrl) => {
         set({ isLoading: true, error: null });
         try {
-            const contentData = await uploadContentDataAPI({
+            await uploadContentDataAPI({
                 page_id: pageId,
                 parsed_content: parsedContent,
                 google_sheet_url: sheetUrl,
             });
 
-            // Check if SEO data exists to determine new status
-            const page = get().getPage(projectId, pageId);
-            const hasSEO = !!page?.seo_data;
-            const newStatus: PageStatus = hasSEO ? 'pending_review' : 'awaiting_seo';
-
-            set((state) => ({
-                projects: state.projects.map((p) =>
-                    p.id === projectId
-                        ? {
-                            ...p,
-                            pages: p.pages?.map((pg) =>
-                                pg.id === pageId
-                                    ? {
-                                        ...pg,
-                                        status: newStatus,
-                                        content_data: {
-                                            id: contentData.id,
-                                            page_id: pageId,
-                                            google_sheet_url: contentData.google_sheet_url || undefined,
-                                            parsed_content: contentData.parsed_content as any,
-                                            uploaded_by: contentData.uploaded_by,
-                                            uploaded_at: contentData.uploaded_at,
-                                            version: contentData.version,
-                                        },
-                                    }
-                                    : pg
-                            ),
-                        }
-                        : p
-                ),
-                isLoading: false,
-            }));
+            // Re-fetch the project to get the correct status from backend
+            // The backend may have triggered analysis and set status to 'processing'
+            await get().fetchProjectById(projectId);
+            set({ isLoading: false });
         } catch (error: any) {
             console.error('Error uploading content:', error);
             set({ error: error.message, isLoading: false });
@@ -409,7 +363,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     approveContent: async (projectId, pageId) => {
         set({ isLoading: true, error: null });
         try {
-            await updatePageStatusAPI(pageId, 'approved');
+            await approvePageAPI(pageId);
 
             set((state) => ({
                 projects: state.projects.map((p) =>
@@ -433,7 +387,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     rejectContent: async (projectId, pageId) => {
         set({ isLoading: true, error: null });
         try {
-            await updatePageStatusAPI(pageId, 'rejected');
+            await rejectPageAPI(pageId);
 
             set((state) => ({
                 projects: state.projects.map((p) =>
@@ -457,7 +411,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     requestRevision: async (projectId, pageId, _reviseSEO, _reviseContent) => {
         set({ isLoading: true, error: null });
         try {
-            await updatePageStatusAPI(pageId, 'revision_requested');
+            await requestRevisionAPI(pageId);
 
             set((state) => ({
                 projects: state.projects.map((p) =>

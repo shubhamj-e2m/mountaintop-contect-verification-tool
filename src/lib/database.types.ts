@@ -109,6 +109,7 @@ export interface Database {
                     name: string;
                     slug: string;
                     status: PageStatus;
+                    error_message: string | null;
                     created_at: string;
                     updated_at: string;
                 };
@@ -118,6 +119,7 @@ export interface Database {
                     name: string;
                     slug: string;
                     status?: PageStatus;
+                    error_message?: string | null;
                     created_at?: string;
                     updated_at?: string;
                 };
@@ -127,6 +129,7 @@ export interface Database {
                     name?: string;
                     slug?: string;
                     status?: PageStatus;
+                    error_message?: string | null;
                     created_at?: string;
                     updated_at?: string;
                 };

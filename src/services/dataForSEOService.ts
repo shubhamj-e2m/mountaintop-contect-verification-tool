@@ -105,7 +105,6 @@ export async function fetchKeywordMetrics(
 
     // Retry with exponential backoff
     const maxRetries = 3;
-    let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
@@ -170,7 +169,6 @@ export async function fetchKeywordMetrics(
             return results;
 
         } catch (error) {
-            lastError = error as Error;
             console.error(`DataForSEO: Attempt ${attempt} failed:`, error);
 
             if (attempt < maxRetries) {
