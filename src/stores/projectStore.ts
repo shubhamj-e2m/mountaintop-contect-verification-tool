@@ -135,6 +135,7 @@ function convertDbPageToApp(p: any, projectId: string): Page {
             suggestions: p.analysis_results.suggestions || [],
             highlighted_content: p.analysis_results.highlighted_content || '',
             processed_at: p.analysis_results.processed_at,
+            seo_score_breakdown: p.analysis_results.seo_score_breakdown || null,
         } : undefined,
     };
 }

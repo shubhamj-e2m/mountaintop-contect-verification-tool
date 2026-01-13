@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileText, Tag, CheckCircle, XCircle, RotateCcw, MessageSquare, Loader2, Trash2, RefreshCw } from 'lucide-react';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ScoreDisplay from '../../components/ui/ScoreDisplay';
+import SEOScoreBreakdownDropdown from '../../components/ui/SEOScoreBreakdownDropdown';
 import { useAuth } from '../../contexts/AuthContext';
 import { useProjectStore } from '../../stores/projectStore';
 import { getKeywordMetrics } from '../../services/seoService';
@@ -890,20 +891,10 @@ const PageDetailPage: React.FC = () => {
                                 </div>
 
                                 <div className="space-y-3">
-                                    <div>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span className="group relative cursor-help">
-                                                SEO Score
-                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
-                                                    Measures keyword placement in title, meta description, H1-H3 headings, and overall keyword optimization.
-                                                </span>
-                                            </span>
-                                            <span className="font-medium">{page.analysis?.seo_score ?? 0}%</span>
-                                        </div>
-                                        <div className="w-full bg-gray-100 rounded-full h-2">
-                                            <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${page.analysis?.seo_score ?? 0}%` }} />
-                                        </div>
-                                    </div>
+                                    <SEOScoreBreakdownDropdown
+                                        score={page.analysis?.seo_score ?? 0}
+                                        breakdown={page.analysis?.seo_score_breakdown}
+                                    />
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span className="group relative cursor-help">

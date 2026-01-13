@@ -93,4 +93,13 @@ export interface AnalysisResult {
     suggestions: Suggestion[];
     highlighted_content: string; // HTML with keywords highlighted
     processed_at: string;
+    seo_score_breakdown?: {
+        totalScore: number;
+        breakdown: {
+            metaTags: { score: number; maxScore: number; details: Record<string, { points: number; maxPoints: number; passed: boolean | number }> };
+            contentQuality: { score: number; maxScore: number; details: Record<string, { points: number; maxPoints: number; passed: boolean | number }> };
+            technical: { score: number; maxScore: number; details: Record<string, { points: number; maxPoints: number; passed: boolean | number }> };
+        };
+        grade: string;
+    } | null;
 }
