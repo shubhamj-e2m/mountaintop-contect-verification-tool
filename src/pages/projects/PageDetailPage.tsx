@@ -39,6 +39,7 @@ const PageDetailPage: React.FC = () => {
     const [revisionContent, setRevisionContent] = useState(true);
     const [keywordMetrics, setKeywordMetrics] = useState<Record<string, any>>({});
     const [csvError, setCsvError] = useState<string>('');
+    const [analysisError, setAnalysisError] = useState<string>('');
     const [analysisProgress, setAnalysisProgress] = useState<{
         step: number;
         message: string;
@@ -482,12 +483,14 @@ const PageDetailPage: React.FC = () => {
     const handleRerunAnalysis = async () => {
         if (!projectId || !pageId) return;
         setIsRerunning(true);
+        setAnalysisError(''); // Clear previous errors
         try {
             await triggerAnalysis(pageId);
             // Refresh project data to get updated analysis
             await fetchProjectById(projectId);
         } catch (error) {
             console.error('Error rerunning analysis:', error);
+            setAnalysisError(error instanceof Error ? error.message : 'Failed to rerun analysis');
         } finally {
             setIsRerunning(false);
         }
@@ -571,6 +574,46 @@ const PageDetailPage: React.FC = () => {
                                     </>
                                 )}
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Analysis Error Alert - shows when there's a new analysis error */}
+            {analysisError && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0">
+                            <AlertTriangle size={20} className="text-red-600" />
+                        </div>
+                        <div className="flex-1">
+                            <h3 className="text-sm font-medium text-red-800">Analysis Error</h3>
+                            <p className="mt-1 text-sm text-red-700">{analysisError}</p>
+                            <div className="mt-3 flex gap-2">
+                                <button
+                                    onClick={handleRerunAnalysis}
+                                    disabled={isRerunning}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+                                >
+                                    {isRerunning ? (
+                                        <>
+                                            <Loader2 size={14} className="animate-spin" />
+                                            Retrying...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <RefreshCw size={14} />
+                                            Retry Analysis
+                                        </>
+                                    )}
+                                </button>
+                                <button
+                                    onClick={() => setAnalysisError('')}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 text-sm bg-gray-600 text-white rounded-md hover:bg-gray-700"
+                                >
+                                    Dismiss
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
