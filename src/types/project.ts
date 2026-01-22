@@ -56,27 +56,46 @@ export interface Project {
     name: string;
     website_url: string;
     description?: string;
+    google_drive_url?: string;
     created_by: string;
     created_at: string;
     updated_at: string;
     pages: Page[];
     members: any[]; // ProjectMember[]
+    target_personas?: TargetPersonaAnalysis;
 }
 
 export interface KeywordAnalysis {
     keyword: string;
     type: 'primary' | 'secondary';
+    keyword_type?: 'primary' | 'secondary' | 'tertiary';
     frequency: number;
+    total_count?: number;
     density: string;
     in_title: boolean;
+    title_count?: number;
     in_h1: boolean;
+    h1_count?: number;
+    h2_count?: number;
+    h3_count?: number;
+    para_count?: number;
     in_first_paragraph: boolean;
+    first_paragraph?: boolean;
+    url_present?: boolean;
+    placement_score?: number;
+    weighted_score?: number;
+    status?: 'optimal' | 'underused' | 'overused';
 }
 
 export interface Suggestion {
-    type: 'info' | 'warning' | 'error';
+    type?: 'info' | 'warning' | 'error';
+    priority?: 'high' | 'medium' | 'low';
     category: string;
     message: string;
+    current_issue?: string;
+    recommended_action?: string;
+    seo_impact?: string;
+    expected_impact?: string;
 }
 
 export interface AnalysisResult {
@@ -89,6 +108,8 @@ export interface AnalysisResult {
     grammar_score: number;
     content_intent_score: number;
     technical_health_score: number;
+    strategic_analysis_score: number;
+    brand_intent_score: number;
     keyword_analysis: KeywordAnalysis[];
     suggestions: Suggestion[];
     highlighted_content: string; // HTML with keywords highlighted
@@ -102,4 +123,69 @@ export interface AnalysisResult {
         };
         grade: string;
     } | null;
+    // New fields from enhanced prompts
+    detected_intent?: 'informational' | 'navigational' | 'commercial' | 'transactional';
+    content_metrics?: {
+        word_count: number;
+        heading_count: { h1: number; h2: number; h3: number; h4: number; h5: number; h6: number };
+        paragraph_count: number;
+        internal_links: number;
+        external_links: number;
+        images_detected: number;
+    };
+    strengths?: string[];
+    critical_issues?: string[];
+    quick_wins?: string[];
+    missing_elements?: string[];
+    journey_stage_detected?: 'awareness' | 'consideration' | 'decision' | 'retention' | 'unclear';
+    primary_user_intent?: string;
+    friction_points?: string[];
+    critical_gaps?: string[];
+    customer_persona?: EnhancedCustomerPersona;
+}
+
+/**
+ * Customer Persona inferred from page content
+ */
+export interface CustomerPersona {
+    summary: string;
+    demographics: {
+        age_range: string;
+        gender: string;
+        location: string;
+        income_level: string;
+    };
+    psychographics: {
+        interests: string[];
+        values: string[];
+        pain_points: string[];
+        goals: string[];
+    };
+    behavior: {
+        online_behavior: string[];
+        buying_patterns: string[];
+        decision_factors: string[];
+    };
+}
+
+/**
+ * Enhanced Customer Persona with target relevance scoring
+ */
+export interface EnhancedCustomerPersona extends CustomerPersona {
+    target_relevance?: {
+        sme_score: number;        // 0-100
+        enterprise_score: number; // 0-100
+        primary_target: 'SME' | 'ENTERPRISE' | 'MIXED';
+        confidence_level: 'high' | 'medium' | 'low';
+    };
+}
+
+/**
+ * Target Persona Analysis for a project
+ */
+export interface TargetPersonaAnalysis {
+    sme_persona: CustomerPersona;
+    enterprise_persona: CustomerPersona;
+    generated_at: string;
+    source_documents: string[]; // ['trailmap', 'brand_strategy']
 }

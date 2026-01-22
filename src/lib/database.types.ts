@@ -56,6 +56,7 @@ export interface Database {
                     name: string;
                     website_url: string;
                     description: string | null;
+                    google_drive_url: string | null;
                     created_by: string;
                     created_at: string;
                     updated_at: string;
@@ -65,6 +66,7 @@ export interface Database {
                     name: string;
                     website_url: string;
                     description?: string | null;
+                    google_drive_url?: string | null;
                     created_by: string;
                     created_at?: string;
                     updated_at?: string;
@@ -74,6 +76,7 @@ export interface Database {
                     name?: string;
                     website_url?: string;
                     description?: string | null;
+                    google_drive_url?: string | null;
                     created_by?: string;
                     created_at?: string;
                     updated_at?: string;
@@ -203,6 +206,8 @@ export interface Database {
                     grammar_score: number;
                     content_intent_score: number;
                     technical_health_score: number;
+                    strategic_analysis_score: number;
+                    brand_intent_score: number;
                     keyword_analysis: Json;
                     suggestions: Json;
                     highlighted_content: string | null;
@@ -218,6 +223,8 @@ export interface Database {
                     grammar_score: number;
                     content_intent_score: number;
                     technical_health_score: number;
+                    strategic_analysis_score: number;
+                    brand_intent_score: number;
                     keyword_analysis?: Json;
                     suggestions?: Json;
                     highlighted_content?: string | null;
@@ -233,6 +240,8 @@ export interface Database {
                     grammar_score?: number;
                     content_intent_score?: number;
                     technical_health_score?: number;
+                    strategic_analysis_score?: number;
+                    brand_intent_score?: number;
                     keyword_analysis?: Json;
                     suggestions?: Json;
                     highlighted_content?: string | null;

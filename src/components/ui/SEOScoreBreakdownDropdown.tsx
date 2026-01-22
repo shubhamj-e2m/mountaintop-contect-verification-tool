@@ -119,9 +119,11 @@ const SEOScoreBreakdownDropdown: React.FC<SEOScoreBreakdownDropdownProps> = ({ s
                 >
                     <span className="group relative cursor-help">
                         SEO Score
-                        <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
-                            Measures keyword placement in title, meta description, H1-H3 headings, and overall keyword optimization.
-                            {hasBreakdown && ' Click to see detailed breakdown.'}
+                        <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-72 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                            <span className="block font-semibold text-blue-400 mb-1">📊 Source: DataForSEO</span>
+                            <span className="block mb-1">Analyzes meta tags, content quality, and technical SEO.</span>
+                            <span className="block text-gray-400 text-[10px]">Formula: Meta Tags (40%) + Content Quality (40%) + Technical (20%)</span>
+                            {hasBreakdown && <span className="block mt-1 text-blue-300">Click to see detailed breakdown.</span>}
                         </span>
                     </span>
                     {hasBreakdown && (
@@ -132,9 +134,9 @@ const SEOScoreBreakdownDropdown: React.FC<SEOScoreBreakdownDropdownProps> = ({ s
                     <span className="font-medium">{score}%</span>
                     {breakdown?.grade && (
                         <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${breakdown.grade === 'A' ? 'bg-green-100 text-green-700' :
-                                breakdown.grade === 'B' ? 'bg-blue-100 text-blue-700' :
-                                    breakdown.grade === 'C' ? 'bg-yellow-100 text-yellow-700' :
-                                        'bg-red-100 text-red-700'
+                            breakdown.grade === 'B' ? 'bg-blue-100 text-blue-700' :
+                                breakdown.grade === 'C' ? 'bg-yellow-100 text-yellow-700' :
+                                    'bg-red-100 text-red-700'
                             }`}>
                             {breakdown.grade}
                         </span>

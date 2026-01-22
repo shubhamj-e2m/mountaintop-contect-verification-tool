@@ -3,7 +3,7 @@ import type { Database } from '../lib/database.types';
 
 type Project = Database['public']['Tables']['projects']['Row'];
 // type ProjectInsert = Database['public']['Tables']['projects']['Insert'];
-type ProjectUpdate = Database['public']['Tables']['projects']['Update'];
+type ProjectUpdate = Partial<Pick<Project, 'name' | 'website_url' | 'description' | 'google_drive_url'>>;
 
 export interface ProjectWithDetails extends Project {
     pages?: PageBasic[];
@@ -57,7 +57,7 @@ interface MemberBasic {
 export async function getProjects(): Promise<ProjectWithDetails[]> {
     try {
         const projects = await apiClient.get<Project[]>('/projects');
-        
+
         // For each project, fetch pages with data in bulk (optimized to avoid N+1)
         const projectsWithData = await Promise.all(projects.map(async (project) => {
             try {
@@ -68,7 +68,7 @@ export async function getProjects(): Promise<ProjectWithDetails[]> {
                     content_data?: any;
                     analysis_results?: any;
                 }>>(`/pages/projects/${project.id}/pages?withData=true`);
-                
+
                 // Transform the response to match expected format
                 const pages = pagesWithData.map(item => ({
                     ...item.page,
@@ -76,7 +76,7 @@ export async function getProjects(): Promise<ProjectWithDetails[]> {
                     content_data: item.content_data || null,
                     analysis_results: item.analysis_results || null,
                 }));
-                
+
                 return {
                     ...project,
                     pages: pages,
@@ -91,7 +91,7 @@ export async function getProjects(): Promise<ProjectWithDetails[]> {
                 };
             }
         }));
-        
+
         return projectsWithData;
     } catch (error) {
         console.error('Error fetching projects:', error);
@@ -105,9 +105,9 @@ export async function getProjects(): Promise<ProjectWithDetails[]> {
 export async function getProjectById(projectId: string): Promise<ProjectWithDetails | null> {
     try {
         const project = await apiClient.get<Project>(`/projects/${projectId}`);
-        
+
         if (!project) return null;
-        
+
         // Fetch pages with data in bulk (optimized to avoid N+1)
         const pagesWithDataResponse = await apiClient.get<Array<{
             page: PageBasic;
@@ -115,7 +115,7 @@ export async function getProjectById(projectId: string): Promise<ProjectWithDeta
             content_data?: any;
             analysis_results?: any;
         }>>(`/pages/projects/${projectId}/pages?withData=true`);
-        
+
         // Transform the response to match expected format
         const pages = pagesWithDataResponse.map(item => ({
             ...item.page,
@@ -123,10 +123,10 @@ export async function getProjectById(projectId: string): Promise<ProjectWithDeta
             content_data: item.content_data || null,
             analysis_results: item.analysis_results || null,
         }));
-        
+
         // Fetch members
         const members = await apiClient.get<MemberBasic[]>(`/projects/${projectId}/members`);
-        
+
         return {
             ...project,
             pages: pages,
@@ -148,6 +148,7 @@ export async function createProject(project: {
     name: string;
     website_url: string;
     description?: string;
+    google_drive_url?: string;
     created_by: string;
 }): Promise<Project> {
     try {
@@ -155,6 +156,7 @@ export async function createProject(project: {
             name: project.name,
             website_url: project.website_url,
             description: project.description,
+            google_drive_url: project.google_drive_url,
         });
         return data;
     } catch (error) {
@@ -171,7 +173,12 @@ export async function updateProject(
     updates: ProjectUpdate
 ): Promise<Project> {
     try {
-        const data = await apiClient.put<Project>(`/projects/${projectId}`, updates);
+        const data = await apiClient.put<Project>(`/projects/${projectId}`, {
+            name: updates.name,
+            website_url: updates.website_url,
+            description: updates.description,
+            google_drive_url: updates.google_drive_url,
+        });
         return data;
     } catch (error) {
         console.error('Error updating project:', error);

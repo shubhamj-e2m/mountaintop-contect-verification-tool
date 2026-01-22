@@ -84,6 +84,7 @@ function convertDbProjectToApp(dbProject: any): Project {
         name: dbProject.name,
         website_url: dbProject.website_url,
         description: dbProject.description || undefined,
+        google_drive_url: dbProject.google_drive_url || undefined,
         created_by: dbProject.created_by,
         created_at: dbProject.created_at,
         updated_at: dbProject.updated_at,
@@ -131,11 +132,19 @@ function convertDbPageToApp(p: any, projectId: string): Page {
             grammar_score: p.analysis_results.grammar_score,
             content_intent_score: p.analysis_results.content_intent_score,
             technical_health_score: p.analysis_results.technical_health_score,
+            strategic_analysis_score: p.analysis_results.strategic_analysis_score,
+            brand_intent_score: p.analysis_results.brand_intent_score,
             keyword_analysis: p.analysis_results.keyword_analysis || [],
             suggestions: p.analysis_results.suggestions || [],
             highlighted_content: p.analysis_results.highlighted_content || '',
             processed_at: p.analysis_results.processed_at,
             seo_score_breakdown: p.analysis_results.seo_score_breakdown || null,
+            // New fields
+            strengths: p.analysis_results.strengths || [],
+            critical_issues: p.analysis_results.critical_issues || [],
+            quick_wins: p.analysis_results.quick_wins || [],
+            missing_elements: p.analysis_results.missing_elements || [],
+            customer_persona: p.analysis_results.customer_persona || null,
         } : undefined,
     };
 }
@@ -225,6 +234,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                 name: updates.name,
                 website_url: updates.website_url,
                 description: updates.description,
+                google_drive_url: updates.google_drive_url,
             });
 
             set((state) => ({

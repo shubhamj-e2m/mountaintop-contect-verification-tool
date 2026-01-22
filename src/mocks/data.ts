@@ -95,6 +95,8 @@ export const mockProjects: Project[] = [
                     grammar_score: 91,
                     content_intent_score: 84,
                     technical_health_score: 87,
+                    strategic_analysis_score: 78,
+                    brand_intent_score: 80,
                     keyword_analysis: [
                         {
                             keyword: 'industrial pumps',
@@ -213,6 +215,8 @@ export const mockProjects: Project[] = [
                     grammar_score: 95,
                     content_intent_score: 91,
                     technical_health_score: 93,
+                    strategic_analysis_score: 89,
+                    brand_intent_score: 92,
                     keyword_analysis: [],
                     suggestions: [],
                     highlighted_content: '<h1>Product Catalog</h1>',

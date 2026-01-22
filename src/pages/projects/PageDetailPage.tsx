@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FileText, Tag, CheckCircle, XCircle, RotateCcw, MessageSquare, Loader2, Trash2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, FileText, Tag, CheckCircle, XCircle, RotateCcw, MessageSquare, Loader2, Trash2, RefreshCw, AlertTriangle, Info, ChevronDown, ChevronRight, Users } from 'lucide-react';
 import StatusBadge from '../../components/ui/StatusBadge';
 import ScoreDisplay from '../../components/ui/ScoreDisplay';
 import SEOScoreBreakdownDropdown from '../../components/ui/SEOScoreBreakdownDropdown';
@@ -10,6 +10,8 @@ import { getKeywordMetrics } from '../../services/seoService';
 import { triggerAnalysis } from '../../services/pageService';
 import { addReviewComment, getReviewComments, type ReviewComment } from '../../services/reviewService';
 import { parseContentFile, validateContentFile } from '../../utils/csvParser';
+import { generateOverallScoreWeights } from '../../utils/scoreWeights';
+import PersonaRelevanceDisplay from '../../components/personas/PersonaRelevanceDisplay';
 
 const PageDetailPage: React.FC = () => {
     const { projectId, pageId } = useParams<{ projectId: string; pageId: string }>();
@@ -45,6 +47,14 @@ const PageDetailPage: React.FC = () => {
     const [isRerunning, setIsRerunning] = useState(false);
     const [comments, setComments] = useState<ReviewComment[]>([]);
     const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+    const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
+
+    const toggleCategory = (category: string) => {
+        setExpandedCategories(prev => ({
+            ...prev,
+            [category]: !prev[category]
+        }));
+    };
 
     const project = projects.find(p => p.id === projectId);
     const page = project?.pages.find(p => p.id === pageId);
@@ -877,6 +887,7 @@ const PageDetailPage: React.FC = () => {
                             </div>
                         </div>
                     )}
+
                 </div>
 
                 {/* Right Column - Scores or Pending Indicator */}
@@ -885,9 +896,39 @@ const PageDetailPage: React.FC = () => {
                         <>
                             {/* Scores Panel */}
                             <div className="bg-white border border-[var(--color-border)] rounded-lg p-6">
-                                <h2 className="text-lg font-semibold mb-4 text-center">Overall Score</h2>
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className="w-10"></div> {/* Spacer to center title */}
+                                    <h2 className="text-lg font-semibold text-center">Overall Score</h2>
+                                    <div className="w-10 flex justify-end">
+                                        {(isAdmin || isVerifier) && (
+                                            <button
+                                                onClick={handleRerunAnalysis}
+                                                disabled={isRerunning}
+                                                title="Rerun Analysis"
+                                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors disabled:opacity-50"
+                                            >
+                                                <RefreshCw size={18} className={isRerunning ? 'animate-spin' : ''} />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
                                 <div className="flex justify-center mb-6">
-                                    <ScoreDisplay score={page.analysis?.overall_score ?? 0} size="lg" />
+                                    <ScoreDisplay 
+                                        score={page.analysis?.overall_score ?? 0} 
+                                        size="lg"
+                                        tooltipTitle="Overall Score Breakdown"
+                                        tooltipDescription="Weighted average of all scoring components"
+                                        weights={generateOverallScoreWeights({
+                                            seo_score: page.analysis?.seo_score,
+                                            readability_score: page.analysis?.readability_score,
+                                            keyword_density_score: page.analysis?.keyword_density_score,
+                                            grammar_score: page.analysis?.grammar_score,
+                                            content_intent_score: page.analysis?.content_intent_score,
+                                            technical_health_score: page.analysis?.technical_health_score,
+                                            strategic_analysis_score: page.analysis?.strategic_analysis_score,
+                                            brand_intent_score: page.analysis?.brand_intent_score,
+                                        })}
+                                    />
                                 </div>
 
                                 <div className="space-y-3">
@@ -899,8 +940,10 @@ const PageDetailPage: React.FC = () => {
                                         <div className="flex justify-between text-sm mb-1">
                                             <span className="group relative cursor-help">
                                                 Readability
-                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
-                                                    Based on sentence length, word complexity, paragraph structure, and overall reading ease (Flesch-Kincaid).
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-72 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    <span className="block font-semibold text-blue-400 mb-1">📊 Source: DataForSEO</span>
+                                                    <span className="block mb-1">Based on Flesch-Kincaid Grade Level analysis.</span>
+                                                    <span className="block text-gray-400 text-[10px]">Formula: Score derived from sentence length and word complexity.</span>
                                                 </span>
                                             </span>
                                             <span className={`font-bold ${getLetterGrade(page.analysis?.readability_score ?? 0).color}`}>
@@ -912,8 +955,10 @@ const PageDetailPage: React.FC = () => {
                                         <div className="flex justify-between text-sm mb-1">
                                             <span className="group relative cursor-help">
                                                 Keyword Density
-                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
-                                                    Evaluates keyword frequency and distribution. Optimal density is 1-3% for primary keywords to avoid over-optimization.
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-72 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    <span className="block font-semibold text-purple-400 mb-1">🏠 Source: In-House Calculation</span>
+                                                    <span className="block mb-1">Measures keyword frequency relative to total word count.</span>
+                                                    <span className="block text-gray-400 text-[10px]">Formula: (Keyword Occurrences / Total Words) × 100. Optimal: 1-3%.</span>
                                                 </span>
                                             </span>
                                             <span className="font-medium">{page.analysis?.keyword_density_score ?? 0}%</span>
@@ -926,8 +971,10 @@ const PageDetailPage: React.FC = () => {
                                         <div className="flex justify-between text-sm mb-1">
                                             <span className="group relative cursor-help">
                                                 Grammar
-                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
-                                                    Checks for grammatical errors, spelling mistakes, punctuation issues, and sentence structure quality.
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-72 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    <span className="block font-semibold text-blue-400 mb-1">📊 Source: DataForSEO</span>
+                                                    <span className="block mb-1">Counts spelling and grammar errors in content.</span>
+                                                    <span className="block text-gray-400 text-[10px]">Formula: 100 - (Errors / Word Count × 1000). Lower errors = higher score.</span>
                                                 </span>
                                             </span>
                                             <span className="font-medium">{page.analysis?.grammar_score ?? 0}%</span>
@@ -940,8 +987,10 @@ const PageDetailPage: React.FC = () => {
                                         <div className="flex justify-between text-sm mb-1">
                                             <span className="group relative cursor-help">
                                                 Content Intent
-                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
-                                                    Measures how well content aligns with search intent - informational, navigational, transactional, or commercial.
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-72 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    <span className="block font-semibold text-yellow-400 mb-1">📄 Source: Google Drive + OpenAI</span>
+                                                    <span className="block mb-1">AI comparison against strategic documents.</span>
+                                                    <span className="block text-gray-400 text-[10px]">Evaluates: Search intent alignment, content purpose, audience match.</span>
                                                 </span>
                                             </span>
                                             <span className="font-medium">{page.analysis?.content_intent_score ?? 0}%</span>
@@ -950,12 +999,49 @@ const PageDetailPage: React.FC = () => {
                                             <div className="bg-pink-500 h-2 rounded-full" style={{ width: `${page.analysis?.content_intent_score ?? 0}%` }} />
                                         </div>
                                     </div>
+
+                                    <div>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className="group relative cursor-help">
+                                                Strategic Analysis
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-72 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    <span className="block font-semibold text-yellow-400 mb-1">📄 Source: Google Drive + OpenAI</span>
+                                                    <span className="block mb-1">AI comparison against Brand Strategy document.</span>
+                                                    <span className="block text-gray-400 text-[10px]">Evaluates: Messaging, tone, value proposition consistency.</span>
+                                                </span>
+                                            </span>
+                                            <span className="font-medium">{page.analysis?.strategic_analysis_score ?? 0}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                            <div className="bg-indigo-500 h-2 rounded-full" style={{ width: `${page.analysis?.strategic_analysis_score ?? 0}%` }} />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span className="group relative cursor-help">
+                                                Brand Intent
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-72 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    <span className="block font-semibold text-yellow-400 mb-1">📄 Source: Google Drive + OpenAI</span>
+                                                    <span className="block mb-1">AI comparison against Digital Trailmap document.</span>
+                                                    <span className="block text-gray-400 text-[10px]">Evaluates: User journey stages, CTA clarity, brand consistency.</span>
+                                                </span>
+                                            </span>
+                                            <span className="font-medium">{page.analysis?.brand_intent_score ?? 0}%</span>
+                                        </div>
+                                        <div className="w-full bg-gray-100 rounded-full h-2">
+                                            <div className="bg-rose-500 h-2 rounded-full" style={{ width: `${page.analysis?.brand_intent_score ?? 0}%` }} />
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <div className="flex justify-between text-sm mb-1">
                                             <span className="group relative cursor-help">
                                                 Technical Health
-                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
-                                                    Evaluates heading hierarchy, meta tag lengths, content structure, and technical SEO best practices.
+                                                <span className="invisible group-hover:visible absolute left-0 bottom-full mb-2 w-72 p-2 bg-gray-900 text-white text-xs rounded-lg z-50">
+                                                    <span className="block font-semibold text-yellow-400 mb-1">📄 Source: Google Drive + OpenAI</span>
+                                                    <span className="block mb-1">AI analysis against document structure standards.</span>
+                                                    <span className="block text-gray-400 text-[10px]">Evaluates: Heading hierarchy, meta lengths, content structure.</span>
                                                 </span>
                                             </span>
                                             <span className="font-medium">{page.analysis?.technical_health_score ?? 0}%</span>
@@ -967,17 +1053,297 @@ const PageDetailPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* Rerun Analysis Button */}
-                            {page.analysis && (
-                                <button
-                                    onClick={handleRerunAnalysis}
-                                    disabled={isRerunning}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 mt-4 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <RefreshCw size={16} className={isRerunning ? 'animate-spin' : ''} />
-                                    {isRerunning ? 'Rerunning Analysis...' : 'Rerun Analysis'}
-                                </button>
+                            {/* Recommendations Section (show to all users when analysis results exist) */}
+                            {page.analysis && page.analysis.suggestions && page.analysis.suggestions.length > 0 && (
+                                <div className="bg-white border border-[var(--color-border)] rounded-lg overflow-hidden">
+                                    <div className="bg-indigo-100 text-indigo-800 px-4 py-2 font-medium text-sm flex items-center gap-2">
+                                        <MessageSquare size={18} />
+                                        ✨ Improvement Recommendations
+                                    </div>
+                                    <div className="p-2 space-y-1">
+                                        {Object.entries(
+                                            page.analysis.suggestions.reduce((acc, sug) => {
+                                                const rawCat = (sug.category || 'General').toLowerCase();
+                                                let bucket = 'General';
+
+                                                if (rawCat.includes('keyword')) {
+                                                    bucket = 'Keywords';
+                                                } else if (
+                                                    rawCat.includes('strategic') ||
+                                                    rawCat.includes('brand') ||
+                                                    rawCat.includes('messaging') ||
+                                                    rawCat.includes('tone') ||
+                                                    rawCat.includes('proposition') ||
+                                                    rawCat.includes('audience') ||
+                                                    rawCat.includes('journey') ||
+                                                    rawCat.includes('trailmap')
+                                                ) {
+                                                    bucket = 'Strategic';
+                                                } else {
+                                                    bucket = 'Content & Technical';
+                                                }
+
+                                                if (!acc[bucket]) acc[bucket] = [];
+                                                acc[bucket].push(sug);
+                                                return acc;
+                                            }, {} as Record<string, typeof page.analysis.suggestions>)
+                                        ).map(([category, rawItems]) => {
+                                            const priorityOrder = { high: 0, error: 0, medium: 1, warning: 1, low: 2, info: 2 };
+                                            const items = [...rawItems].sort((a, b) => {
+                                                const pA = (a.priority || (a as any).type || 'low').toLowerCase();
+                                                const pB = (b.priority || (b as any).type || 'low').toLowerCase();
+                                                return (priorityOrder[pA as keyof typeof priorityOrder] ?? 2) - (priorityOrder[pB as keyof typeof priorityOrder] ?? 2);
+                                            });
+
+                                            const isExpanded = !!expandedCategories[category]; // Default to collapsed
+                                            const hasHighPriority = items.some(s => (s.priority || (s as any).type) === 'high' || (s.priority || (s as any).type) === 'error');
+
+                                            return (
+                                                <div key={category} className="border border-gray-100 rounded-md overflow-hidden">
+                                                    <button
+                                                        onClick={() => toggleCategory(category)}
+                                                        className={`w-full flex items-center justify-between p-3 text-left transition-colors ${isExpanded ? 'bg-gray-50' : 'hover:bg-gray-50'
+                                                            }`}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            {isExpanded ? <ChevronDown size={16} className="text-gray-400" /> : <ChevronRight size={16} className="text-gray-400" />}
+                                                            <span className="font-semibold text-sm text-gray-700">{category}</span>
+                                                            <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                                                                {items.length}
+                                                            </span>
+                                                            {hasHighPriority && !isExpanded && (
+                                                                <AlertTriangle size={14} className="text-red-500 animate-pulse" />
+                                                            )}
+                                                        </div>
+                                                    </button>
+
+                                                    {isExpanded && (
+                                                        <div className="p-3 space-y-3 bg-white border-t border-gray-100">
+                                                            {items.map((suggestion, i) => {
+                                                                const priority = suggestion.priority || (suggestion as any).type;
+                                                                const isHigh = priority === 'high' || priority === 'error';
+                                                                const isMedium = priority === 'medium' || priority === 'warning';
+
+                                                                return (
+                                                                    <div
+                                                                        key={i}
+                                                                        className={`flex gap-3 p-3 rounded-md border ${isHigh
+                                                                            ? 'bg-red-50 border-red-100'
+                                                                            : isMedium
+                                                                                ? 'bg-orange-50 border-orange-100'
+                                                                                : 'bg-blue-50 border-blue-100'
+                                                                            }`}
+                                                                    >
+                                                                        <div className="shrink-0 mt-0.5">
+                                                                            {isHigh ? (
+                                                                                <AlertTriangle size={18} className="text-red-500" />
+                                                                            ) : isMedium ? (
+                                                                                <AlertTriangle size={18} className="text-orange-500" />
+                                                                            ) : (
+                                                                                <Info size={18} className="text-blue-500" />
+                                                                            )}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="flex items-center gap-2 mb-1">
+                                                                                <span className="text-[10px] bg-white text-gray-500 font-bold uppercase px-1.5 py-0.5 rounded border border-gray-100">
+                                                                                    {suggestion.category}
+                                                                                </span>
+                                                                                <span className={`text-[10px] text-gray-400 font-bold uppercase`}>
+                                                                                    {priority?.toUpperCase() || 'INFO'}
+                                                                                </span>
+                                                                            </div>
+                                                                            <p className="text-sm text-gray-800">{suggestion.message}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
                             )}
+
+                            {/* Insights Panel - Show strengths, quick wins, critical issues, missing elements */}
+                            {page.analysis && (
+                                (page.analysis.strengths?.length || page.analysis.quick_wins?.length || page.analysis.critical_issues?.length || page.analysis.missing_elements?.length) ? (
+                                    <div className="bg-white border border-[var(--color-border)] rounded-lg overflow-hidden">
+                                        <div className="bg-emerald-100 text-emerald-800 px-4 py-2 font-medium text-sm flex items-center gap-2">
+                                            <Info size={18} />
+                                            Analysis Insights
+                                        </div>
+                                        <div className="p-3 space-y-3">
+                                            {/* Strengths */}
+                                            {page.analysis.strengths && page.analysis.strengths.length > 0 && (
+                                                <div>
+                                                    <h4 className="text-xs font-bold text-green-700 uppercase mb-1">Strengths</h4>
+                                                    <ul className="space-y-1">
+                                                        {page.analysis.strengths.map((s, i) => (
+                                                            <li key={i} className="text-xs text-gray-700 bg-green-50 p-2 rounded border border-green-100">{s}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {/* Quick Wins */}
+                                            {page.analysis.quick_wins && page.analysis.quick_wins.length > 0 && (
+                                                <div>
+                                                    <h4 className="text-xs font-bold text-blue-700 uppercase mb-1">Quick Wins</h4>
+                                                    <ul className="space-y-1">
+                                                        {page.analysis.quick_wins.map((s, i) => (
+                                                            <li key={i} className="text-xs text-gray-700 bg-blue-50 p-2 rounded border border-blue-100">{s}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {/* Critical Issues */}
+                                            {page.analysis.critical_issues && page.analysis.critical_issues.length > 0 && (
+                                                <div>
+                                                    <h4 className="text-xs font-bold text-red-700 uppercase mb-1">Critical Issues</h4>
+                                                    <ul className="space-y-1">
+                                                        {page.analysis.critical_issues.map((s, i) => (
+                                                            <li key={i} className="text-xs text-gray-700 bg-red-50 p-2 rounded border border-red-100">{s}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {/* Missing Elements */}
+                                            {page.analysis.missing_elements && page.analysis.missing_elements.length > 0 && (
+                                                <div>
+                                                    <h4 className="text-xs font-bold text-orange-700 uppercase mb-1">Missing Elements</h4>
+                                                    <ul className="space-y-1">
+                                                        {page.analysis.missing_elements.map((s, i) => (
+                                                            <li key={i} className="text-xs text-gray-700 bg-orange-50 p-2 rounded border border-orange-100">{s}</li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : null
+                            )}
+
+                            {/* Customer Persona Section */}
+                            {page.analysis?.customer_persona && (
+                                <div className="bg-white border border-[var(--color-border)] rounded-lg overflow-hidden">
+                                    <div className="bg-violet-100 text-violet-800 px-4 py-2 font-medium text-sm flex items-center gap-2">
+                                        <Users size={18} />
+                                        🎯 Customer Persona
+                                    </div>
+                                    <div className="p-4 space-y-4">
+                                        {/* Target Relevance Display */}
+                                        {page.analysis.customer_persona.target_relevance && (
+                                            <PersonaRelevanceDisplay 
+                                                persona={page.analysis.customer_persona}
+                                                className="mb-4"
+                                            />
+                                        )}
+
+                                        {/* Persona Summary */}
+                                        <div className="bg-violet-50 border border-violet-100 rounded-lg p-3">
+                                            <p className="text-sm text-gray-700 italic">"{page.analysis.customer_persona.summary}"</p>
+                                        </div>
+
+                                        {/* Demographics */}
+                                        <div>
+                                            <h4 className="text-xs font-bold text-violet-700 uppercase mb-2">Demographics</h4>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
+                                                    <span className="text-[10px] text-gray-500 uppercase">Age Range</span>
+                                                    <p className="text-xs font-medium text-gray-700">{page.analysis.customer_persona.demographics.age_range}</p>
+                                                </div>
+                                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
+                                                    <span className="text-[10px] text-gray-500 uppercase">Gender</span>
+                                                    <p className="text-xs font-medium text-gray-700">{page.analysis.customer_persona.demographics.gender}</p>
+                                                </div>
+                                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
+                                                    <span className="text-[10px] text-gray-500 uppercase">Location</span>
+                                                    <p className="text-xs font-medium text-gray-700">{page.analysis.customer_persona.demographics.location}</p>
+                                                </div>
+                                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
+                                                    <span className="text-[10px] text-gray-500 uppercase">Income Level</span>
+                                                    <p className="text-xs font-medium text-gray-700">{page.analysis.customer_persona.demographics.income_level}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Psychographics */}
+                                        <div>
+                                            <h4 className="text-xs font-bold text-violet-700 uppercase mb-2">Psychographics</h4>
+                                            <div className="space-y-2">
+                                                {page.analysis.customer_persona.psychographics.interests.length > 0 && (
+                                                    <div>
+                                                        <span className="text-[10px] text-gray-500 uppercase">Interests</span>
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {page.analysis.customer_persona.psychographics.interests.map((item, i) => (
+                                                                <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] rounded-full border border-blue-100">{item}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {page.analysis.customer_persona.psychographics.pain_points.length > 0 && (
+                                                    <div>
+                                                        <span className="text-[10px] text-gray-500 uppercase">Pain Points</span>
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {page.analysis.customer_persona.psychographics.pain_points.map((item, i) => (
+                                                                <span key={i} className="px-2 py-0.5 bg-red-50 text-red-700 text-[10px] rounded-full border border-red-100">{item}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {page.analysis.customer_persona.psychographics.goals.length > 0 && (
+                                                    <div>
+                                                        <span className="text-[10px] text-gray-500 uppercase">Goals</span>
+                                                        <div className="flex flex-wrap gap-1 mt-1">
+                                                            {page.analysis.customer_persona.psychographics.goals.map((item, i) => (
+                                                                <span key={i} className="px-2 py-0.5 bg-green-50 text-green-700 text-[10px] rounded-full border border-green-100">{item}</span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Behavior */}
+                                        {(page.analysis.customer_persona.behavior.decision_factors.length > 0 || page.analysis.customer_persona.behavior.buying_patterns.length > 0) && (
+                                            <div>
+                                                <h4 className="text-xs font-bold text-violet-700 uppercase mb-2">Behavior</h4>
+                                                <div className="space-y-2">
+                                                    {page.analysis.customer_persona.behavior.decision_factors.length > 0 && (
+                                                        <div>
+                                                            <span className="text-[10px] text-gray-500 uppercase">Decision Factors</span>
+                                                            <ul className="mt-1 space-y-1">
+                                                                {page.analysis.customer_persona.behavior.decision_factors.map((item, i) => (
+                                                                    <li key={i} className="text-xs text-gray-700 flex items-center gap-1">
+                                                                        <span className="w-1 h-1 bg-violet-400 rounded-full"></span>
+                                                                        {item}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                    {page.analysis.customer_persona.behavior.buying_patterns.length > 0 && (
+                                                        <div>
+                                                            <span className="text-[10px] text-gray-500 uppercase">Buying Patterns</span>
+                                                            <ul className="mt-1 space-y-1">
+                                                                {page.analysis.customer_persona.behavior.buying_patterns.map((item, i) => (
+                                                                    <li key={i} className="text-xs text-gray-700 flex items-center gap-1">
+                                                                        <span className="w-1 h-1 bg-violet-400 rounded-full"></span>
+                                                                        {item}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="w-full h-px bg-gray-100 my-4" />
 
                             {/* Verifier Actions */}
                             {isVerifier && page.status === 'pending_review' && (

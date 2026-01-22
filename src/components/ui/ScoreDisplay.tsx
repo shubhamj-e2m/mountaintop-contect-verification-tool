@@ -1,12 +1,30 @@
 import React from 'react';
+import ScoreTooltip from './ScoreTooltip';
+
+interface ScoreWeight {
+    name: string;
+    weight: number;
+    score?: number;
+    color?: string;
+}
 
 interface ScoreDisplayProps {
     score: number;
     size?: 'sm' | 'md' | 'lg';
     showLabel?: boolean;
+    tooltipTitle?: string;
+    tooltipDescription?: string;
+    weights?: ScoreWeight[];
 }
 
-const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ score, size = 'md', showLabel = false }) => {
+const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ 
+    score, 
+    size = 'md', 
+    showLabel = false,
+    tooltipTitle,
+    tooltipDescription,
+    weights
+}) => {
     const getColor = () => {
         if (score >= 80) return 'text-green-600';
         if (score >= 60) return 'text-yellow-600';
@@ -30,7 +48,7 @@ const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ score, size = 'md', showLab
     const circumference = 2 * Math.PI * radius;
     const offset = circumference - (score / 100) * circumference;
 
-    return (
+    const scoreDisplay = (
         <div className="flex flex-col items-center">
             <div className={`relative ${container}`}>
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
@@ -62,6 +80,22 @@ const ScoreDisplay: React.FC<ScoreDisplayProps> = ({ score, size = 'md', showLab
             {showLabel && <span className="mt-1 text-xs text-gray-500">Score</span>}
         </div>
     );
+
+    // If we have tooltip data, wrap with ScoreTooltip
+    if (tooltipTitle && weights && weights.length > 0) {
+        return (
+            <ScoreTooltip
+                title={tooltipTitle}
+                description={tooltipDescription}
+                weights={weights}
+                totalScore={score}
+            >
+                {scoreDisplay}
+            </ScoreTooltip>
+        );
+    }
+
+    return scoreDisplay;
 };
 
 export default ScoreDisplay;
