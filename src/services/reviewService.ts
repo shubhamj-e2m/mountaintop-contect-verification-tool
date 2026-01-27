@@ -63,9 +63,16 @@ export async function rejectPage(pageId: string): Promise<void> {
 /**
  * Request revision for a page
  */
-export async function requestRevision(pageId: string): Promise<void> {
+export async function requestRevision(
+    pageId: string,
+    reviseSEO: boolean = false,
+    reviseContent: boolean = false
+): Promise<void> {
     try {
-        await apiClient.post(`/pages/${pageId}/request-revision`, {});
+        await apiClient.post(`/pages/${pageId}/request-revision`, {
+            reviseSEO,
+            reviseContent,
+        });
     } catch (error) {
         console.error('Error requesting revision:', error);
         throw error;

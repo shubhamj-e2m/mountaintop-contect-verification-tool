@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Loader2 } from 'lucide-react';
 import ProjectCard from '../../components/projects/ProjectCard';
 import EmptyState from '../../components/ui/EmptyState';
@@ -6,45 +7,67 @@ import { useProjectStore } from '../../stores/projectStore';
 import { useAuth } from '../../contexts/AuthContext';
 
 const ProjectsListPage: React.FC = () => {
+    const navigate = useNavigate();
     const { user } = useAuth();
-    const { projects, isLoading, error, fetchProjects, addProject, clearError } = useProjectStore();
+    const projects = useProjectStore(state => state.projects);
+    const isLoading = useProjectStore(state => state.isLoading);
+    const error = useProjectStore(state => state.error);
+    const fetchProjects = useProjectStore(state => state.fetchProjects);
+    const clearError = useProjectStore(state => state.clearError);
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState<'all' | 'my' | 'recent'>('all');
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    const [isCreating, setIsCreating] = useState(false);
 
-    // Form state
-    const [newProjectName, setNewProjectName] = useState('');
-    const [newProjectUrl, setNewProjectUrl] = useState('');
-    const [newProjectDesc, setNewProjectDesc] = useState('');
-
-    // Fetch projects on mount only
+    // Fetch projects on mount only (will use cache if available)
     useEffect(() => {
-        fetchProjects();
+        fetchProjects(false); // false = use cache if available
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const filteredProjects = projects.filter(project =>
-        project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        project.website_url.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    // Apply filters and search
+    const filteredProjects = useMemo(() => {
+        let result = [...projects];
 
-    const handleCreateProject = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newProjectName.trim() || !newProjectUrl.trim() || !user) return;
-
-        setIsCreating(true);
-        const result = await addProject(newProjectName, newProjectUrl, newProjectDesc || undefined, user.id);
-        setIsCreating(false);
-
-        if (result) {
-            // Reset form and close modal
-            setNewProjectName('');
-            setNewProjectUrl('');
-            setNewProjectDesc('');
-            setShowCreateModal(false);
+        // Apply filter first
+        if (filter === 'my') {
+            // Show only projects created by current user
+            result = result.filter(project => project.created_by === user?.id);
+        } else if (filter === 'recent') {
+            // Show projects updated in the last 7 days, sorted by most recent
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            
+            result = result
+                .filter(project => {
+                    const updatedAt = new Date(project.updated_at);
+                    return updatedAt >= sevenDaysAgo;
+                })
+                .sort((a, b) => {
+                    const dateA = new Date(a.updated_at).getTime();
+                    const dateB = new Date(b.updated_at).getTime();
+                    return dateB - dateA; // Most recent first
+                });
+        } else {
+            // 'all' - show all projects, sorted by most recent
+            result = result.sort((a, b) => {
+                const dateA = new Date(a.updated_at).getTime();
+                const dateB = new Date(b.updated_at).getTime();
+                return dateB - dateA; // Most recent first
+            });
         }
-    };
+
+        // Apply search query
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase().trim();
+            result = result.filter(project =>
+                project.name.toLowerCase().includes(query) ||
+                project.website_url.toLowerCase().includes(query) ||
+                (project.description && project.description.toLowerCase().includes(query))
+            );
+        }
+
+        return result;
+    }, [projects, filter, searchQuery, user?.id]);
+
 
     // Any authenticated user can create projects
     const canCreateProject = !!user;
@@ -56,7 +79,7 @@ const ProjectsListPage: React.FC = () => {
                 <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">Projects</h1>
                 {canCreateProject && (
                     <button
-                        onClick={() => setShowCreateModal(true)}
+                        onClick={() => navigate('/projects/new')}
                         className="flex items-center gap-2 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 transition-smooth font-medium"
                     >
                         <Plus size={18} />
@@ -119,77 +142,18 @@ const ProjectsListPage: React.FC = () => {
             ) : (
                 <EmptyState
                     title="No projects found"
-                    description={searchQuery ? 'Try adjusting your search criteria' : 'Create your first project to get started'}
-                    actionLabel={!searchQuery && canCreateProject ? 'Create Project' : undefined}
-                    onAction={!searchQuery && canCreateProject ? () => setShowCreateModal(true) : undefined}
+                    description={
+                        searchQuery 
+                            ? `No projects match "${searchQuery}". Try adjusting your search criteria.`
+                            : filter === 'my'
+                            ? "You haven't created any projects yet."
+                            : filter === 'recent'
+                            ? "No projects have been updated recently."
+                            : 'Create your first project to get started'
+                    }
+                    actionLabel={!searchQuery && filter === 'all' && canCreateProject ? 'Create Project' : undefined}
+                    onAction={!searchQuery && filter === 'all' && canCreateProject ? () => navigate('/projects/new') : undefined}
                 />
-            )}
-
-            {/* Create Project Modal */}
-            {showCreateModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-                        <h2 className="text-xl font-semibold mb-4">Create New Project</h2>
-                        <form onSubmit={handleCreateProject} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-                                    Project Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g., Company Website"
-                                    value={newProjectName}
-                                    onChange={(e) => setNewProjectName(e.target.value)}
-                                    required
-                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-                                    Website URL *
-                                </label>
-                                <input
-                                    type="url"
-                                    placeholder="https://example.com"
-                                    value={newProjectUrl}
-                                    onChange={(e) => setNewProjectUrl(e.target.value)}
-                                    required
-                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-                                    Description (optional)
-                                </label>
-                                <textarea
-                                    rows={3}
-                                    placeholder="Brief description of the project..."
-                                    value={newProjectDesc}
-                                    onChange={(e) => setNewProjectDesc(e.target.value)}
-                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                />
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowCreateModal(false)}
-                                    disabled={isCreating}
-                                    className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md text-[var(--color-text-secondary)] hover:bg-gray-50 transition-smooth disabled:opacity-50"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isCreating}
-                                    className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 transition-smooth disabled:opacity-50 flex items-center justify-center gap-2"
-                                >
-                                    {isCreating && <Loader2 size={16} className="animate-spin" />}
-                                    {isCreating ? 'Creating...' : 'Create Project'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
             )}
         </div>
     );

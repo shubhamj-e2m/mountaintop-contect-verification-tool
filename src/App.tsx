@@ -5,11 +5,15 @@ import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/auth/LoginPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import ProjectsListPage from './pages/projects/ProjectsListPage';
+import CreateProjectPage from './pages/projects/CreateProjectPage';
 import ProjectDetailPage from './pages/projects/ProjectDetailPage';
+import ProjectSettingsPage from './pages/projects/ProjectSettingsPage';
 import PageDetailPage from './pages/projects/PageDetailPage';
 import MyTasksPage from './pages/tasks/MyTasksPage';
 import ActivityPage from './pages/activity/ActivityPage';
 import SettingsPage from './pages/settings/SettingsPage';
+import TeamManagementPage from './pages/admin/TeamManagementPage';
+import { RequireRole } from './components/auth/RequireRole';
 import { Loader2 } from 'lucide-react';
 
 // Loading component for auth check
@@ -56,11 +60,21 @@ function AppRoutes() {
         <Route index element={<Navigate to="/dashboard" />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="projects" element={<ProjectsListPage />} />
+        <Route path="projects/new" element={<CreateProjectPage />} />
         <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="projects/:projectId/settings" element={<ProjectSettingsPage />} />
         <Route path="projects/:projectId/pages/:pageId" element={<PageDetailPage />} />
         <Route path="tasks" element={<MyTasksPage />} />
         <Route path="activity" element={<ActivityPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route
+          path="admin/team"
+          element={
+            <RequireRole allowedRoles={['admin']}>
+              <TeamManagementPage />
+            </RequireRole>
+          }
+        />
       </Route>
     </Routes>
   );

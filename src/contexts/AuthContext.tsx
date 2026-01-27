@@ -58,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         initAuth();
 
-        // Listen for auth changes
+        // Listen for auth changes including token refresh
         const {
             data: { subscription },
         } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -77,6 +77,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             } else if (event === 'SIGNED_OUT') {
                 setUser(null);
                 setIsLoading(false);
+            } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+                // Token was refreshed in background - update session silently
+                // No need to refetch user profile, just ensure session is valid
+                console.log('Token refreshed successfully');
             }
         });
 

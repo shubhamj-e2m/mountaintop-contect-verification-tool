@@ -1,12 +1,30 @@
-import React, { useState } from 'react';
-import { useLocation, Link } from 'react-router-dom';
-import { ChevronRight, Bell, Search, HelpCircle, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
+import { ChevronRight, Search, HelpCircle, X, FolderOpen, FileText } from 'lucide-react';
 import { useProjectStore } from '../../stores/projectStore';
+import NotificationDropdown from '../notifications/NotificationDropdown';
+import { getUnreadCount } from '../../services/notificationService';
+
+interface SearchResult {
+    type: 'project' | 'page';
+    id: string;
+    projectId?: string;
+    name: string;
+    description?: string;
+    path: string;
+}
 
 const Header: React.FC = () => {
     const location = useLocation();
-    const { projects } = useProjectStore();
+    const navigate = useNavigate();
+    const projects = useProjectStore(state => state.projects);
     const [showHelpModal, setShowHelpModal] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isSearchFocused, setIsSearchFocused] = useState(false);
+    const [selectedIndex, setSelectedIndex] = useState(-1);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const searchResultsRef = useRef<HTMLDivElement>(null);
 
     // Generate breadcrumbs from current path with intelligent name lookup
     const generateBreadcrumbs = () => {
@@ -48,6 +66,131 @@ const Header: React.FC = () => {
 
     const breadcrumbs = generateBreadcrumbs();
 
+    // Fetch unread count on mount
+    useEffect(() => {
+        const fetchUnreadCount = async () => {
+            try {
+                const count = await getUnreadCount();
+                setUnreadCount(count);
+            } catch (error) {
+                console.error('Error fetching unread count:', error);
+            }
+        };
+
+        fetchUnreadCount();
+    }, []);
+
+    // Search results
+    const searchResults = useMemo<SearchResult[]>(() => {
+        if (!searchQuery.trim() || searchQuery.length < 2) {
+            return [];
+        }
+
+        const query = searchQuery.toLowerCase().trim();
+        const results: SearchResult[] = [];
+
+        // Search projects
+        projects.forEach(project => {
+            const matchesName = project.name.toLowerCase().includes(query);
+            const matchesUrl = project.website_url.toLowerCase().includes(query);
+            const matchesDesc = project.description?.toLowerCase().includes(query);
+
+            if (matchesName || matchesUrl || matchesDesc) {
+                results.push({
+                    type: 'project',
+                    id: project.id,
+                    name: project.name,
+                    description: project.description || project.website_url,
+                    path: `/projects/${project.id}`,
+                });
+            }
+
+            // Search pages within this project
+            project.pages?.forEach(page => {
+                const matchesPageName = page.name.toLowerCase().includes(query);
+                const matchesPageSlug = page.slug.toLowerCase().includes(query);
+
+                if (matchesPageName || matchesPageSlug) {
+                    results.push({
+                        type: 'page',
+                        id: page.id,
+                        projectId: project.id,
+                        name: page.name,
+                        description: `Page in ${project.name}`,
+                        path: `/projects/${project.id}/pages/${page.id}`,
+                    });
+                }
+            });
+        });
+
+        // Limit results to 10
+        return results.slice(0, 10);
+    }, [searchQuery, projects]);
+
+    // Handle keyboard navigation
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (!isSearchFocused || searchResults.length === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedIndex(prev => 
+                    prev < searchResults.length - 1 ? prev + 1 : prev
+                );
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedIndex(prev => prev > 0 ? prev - 1 : -1);
+            } else if (e.key === 'Enter' && selectedIndex >= 0) {
+                e.preventDefault();
+                const result = searchResults[selectedIndex];
+                navigate(result.path);
+                setSearchQuery('');
+                setIsSearchFocused(false);
+                searchInputRef.current?.blur();
+            } else if (e.key === 'Escape') {
+                setSearchQuery('');
+                setIsSearchFocused(false);
+                searchInputRef.current?.blur();
+            }
+        };
+
+        if (isSearchFocused) {
+            document.addEventListener('keydown', handleKeyDown);
+            return () => document.removeEventListener('keydown', handleKeyDown);
+        }
+    }, [isSearchFocused, searchResults, selectedIndex, navigate]);
+
+    // Reset selected index when search results change
+    useEffect(() => {
+        setSelectedIndex(-1);
+    }, [searchQuery]);
+
+    // Close search on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (
+                searchResultsRef.current &&
+                !searchResultsRef.current.contains(e.target as Node) &&
+                searchInputRef.current &&
+                !searchInputRef.current.contains(e.target as Node)
+            ) {
+                setIsSearchFocused(false);
+            }
+        };
+
+        if (isSearchFocused) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [isSearchFocused]);
+
+    const handleResultClick = (result: SearchResult) => {
+        navigate(result.path);
+        setSearchQuery('');
+        setIsSearchFocused(false);
+        searchInputRef.current?.blur();
+    };
+
     return (
         <>
             <header className="bg-bg-secondary border-b border-border px-6 h-14 flex items-center">
@@ -73,16 +216,68 @@ const Header: React.FC = () => {
                     {/* Right Section */}
                     <div className="flex items-center gap-4">
                         {/* Search */}
-                        <div className="relative">
+                        <div className="relative" style={{ width: '300px' }}>
                             <Search
                                 size={18}
                                 className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary"
                             />
                             <input
+                                ref={searchInputRef}
                                 type="text"
-                                placeholder="Search..."
-                                className="pl-10 pr-4 py-2 bg-bg-tertiary border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-smooth"
+                                placeholder="Search projects, pages..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onFocus={() => setIsSearchFocused(true)}
+                                className="w-full pl-10 pr-4 py-2 bg-bg-tertiary border border-border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-smooth"
                             />
+                            
+                            {/* Search Results Dropdown */}
+                            {isSearchFocused && searchQuery.trim().length >= 2 && (
+                                <div
+                                    ref={searchResultsRef}
+                                    className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-md shadow-lg z-50 max-h-96 overflow-y-auto"
+                                >
+                                    {searchResults.length > 0 ? (
+                                        <div className="py-2">
+                                            {searchResults.map((result, index) => (
+                                                <button
+                                                    key={`${result.type}-${result.id}`}
+                                                    onClick={() => handleResultClick(result)}
+                                                    className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-smooth flex items-start gap-3 ${
+                                                        index === selectedIndex ? 'bg-gray-50' : ''
+                                                    }`}
+                                                    onMouseEnter={() => setSelectedIndex(index)}
+                                                >
+                                                    <div className="flex-shrink-0 mt-0.5">
+                                                        {result.type === 'project' ? (
+                                                            <FolderOpen size={18} className="text-accent" />
+                                                        ) : (
+                                                            <FileText size={18} className="text-text-secondary" />
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="font-medium text-text-primary truncate">
+                                                            {result.name}
+                                                        </div>
+                                                        <div className="text-xs text-text-secondary truncate mt-0.5">
+                                                            {result.description}
+                                                        </div>
+                                                        {result.type === 'page' && (
+                                                            <div className="text-xs text-text-tertiary mt-0.5">
+                                                                Page
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="px-4 py-8 text-center text-text-secondary text-sm">
+                                            No results found for "{searchQuery}"
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* Help Button */}
@@ -95,10 +290,10 @@ const Header: React.FC = () => {
                         </button>
 
                         {/* Notifications */}
-                        <button className="relative p-2 hover:bg-bg-tertiary rounded-md transition-smooth">
-                            <Bell size={20} className="text-text-secondary" />
-                            <span className="absolute top-1 right-1 w-2 h-2 bg-error rounded-full"></span>
-                        </button>
+                        <NotificationDropdown
+                            unreadCount={unreadCount}
+                            onUnreadCountChange={setUnreadCount}
+                        />
 
                         {/* User Dropdown - Placeholder */}
                         <div className="w-8 h-8 bg-accent rounded-full"></div>
@@ -108,8 +303,14 @@ const Header: React.FC = () => {
 
             {/* Help Modal */}
             {showHelpModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+                <div 
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                    onClick={() => setShowHelpModal(false)}
+                >
+                    <div 
+                        className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <div className="flex items-center justify-between p-4 border-b">
                             <h2 className="text-xl font-semibold">How to Use Content Verify</h2>
                             <button

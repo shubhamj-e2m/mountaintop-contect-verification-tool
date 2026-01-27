@@ -10,7 +10,7 @@ interface ProjectCardProps {
 
 const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
     const navigate = useNavigate();
-    const { deleteProject } = useProjectStore();
+    const deleteProject = useProjectStore(state => state.deleteProject);
     const approvedPages = project.pages.filter(p => p.status === 'approved').length;
     const pendingPages = project.pages.filter(p => p.status === 'pending_review').length;
     const totalPages = project.pages.length;

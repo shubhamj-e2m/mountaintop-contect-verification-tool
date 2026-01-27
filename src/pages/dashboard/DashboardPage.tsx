@@ -7,7 +7,7 @@ import { ChevronDown, ChevronRight, FileText, Tag, CheckCircle, XCircle, Clock, 
 
 const DashboardPage: React.FC = () => {
     const { user } = useAuth();
-    const { projects } = useProjectStore();
+    const projects = useProjectStore(state => state.projects);
     const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
 
     const getGreeting = () => {

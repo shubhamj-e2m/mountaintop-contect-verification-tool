@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { Plus, ExternalLink, Settings, ArrowLeft } from 'lucide-react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { Plus, ExternalLink, Settings, ArrowLeft, Loader2 } from 'lucide-react';
 import StatusBadge from '../../components/ui/StatusBadge';
 import DataStatusIndicator from '../../components/ui/DataStatusIndicator';
 import TargetPersonasDisplay from '../../components/personas/TargetPersonasDisplay';
@@ -9,11 +9,13 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const ProjectDetailPage: React.FC = () => {
     const { projectId } = useParams<{ projectId: string }>();
-    const { projects, addPage } = useProjectStore();
+    const navigate = useNavigate();
+    const projects = useProjectStore(state => state.projects);
+    const addPage = useProjectStore(state => state.addPage);
+    const storeError = useProjectStore(state => state.error);
     const { user } = useAuth();
     const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'needs_work'>('all');
     const [showAddPageModal, setShowAddPageModal] = useState(false);
-    const [showSettingsModal, setShowSettingsModal] = useState(false);
 
     // Admin, SEO Analyst, and Content Writer can create pages
     const canCreatePage = user?.role === 'admin' || user?.role === 'seo_analyst' || user?.role === 'content_writer';
@@ -22,13 +24,8 @@ const ProjectDetailPage: React.FC = () => {
     // Page Form state
     const [newPageName, setNewPageName] = useState('');
     const [newPageSlug, setNewPageSlug] = useState('');
-
-    // Project Settings Form state
-    const [editName, setEditName] = useState('');
-    const [editWebsiteUrl, setEditWebsiteUrl] = useState('');
-    const [editDescription, setEditDescription] = useState('');
-    const [editDriveUrl, setEditDriveUrl] = useState('');
-    const [isSavingSettings, setIsSavingSettings] = useState(false);
+    const [pageDuplicateError, setPageDuplicateError] = useState('');
+    const [isAddingPage, setIsAddingPage] = useState(false);
 
     const project = projects.find(p => p.id === projectId);
 
@@ -56,44 +53,60 @@ const ProjectDetailPage: React.FC = () => {
             (project.pages.filter(p => p.analysis).length || 1),
     };
 
-    const handleAddPage = (e: React.FormEvent) => {
+    // Check for duplicate page slug
+    const checkDuplicateSlug = (slug: string): boolean => {
+        if (!slug.trim() || !project) return false;
+        const trimmedSlug = slug.trim().toLowerCase();
+        return project.pages?.some(page => page.slug.toLowerCase() === trimmedSlug) || false;
+    };
+
+    const handleAddPage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newPageName.trim() || !newPageSlug.trim() || !projectId) return;
 
-        addPage(projectId, newPageName, newPageSlug);
+        // Check for duplicate slug
+        if (checkDuplicateSlug(newPageSlug)) {
+            setPageDuplicateError(`A page with the slug "${newPageSlug.trim()}" already exists in this project. Please choose a different slug.`);
+            return;
+        }
 
-        setNewPageName('');
-        setNewPageSlug('');
-        setShowAddPageModal(false);
-    };
+        setPageDuplicateError('');
+        setIsAddingPage(true);
 
-    const handleOpenSettings = () => {
-        if (project) {
-            setEditName(project.name);
-            setEditWebsiteUrl(project.website_url);
-            setEditDescription(project.description || '');
-            setEditDriveUrl(project.google_drive_url || '');
-            setShowSettingsModal(true);
+        try {
+            const result = await addPage(projectId, newPageName, newPageSlug);
+            
+            if (result) {
+                // Success - reset form and close modal
+                setNewPageName('');
+                setNewPageSlug('');
+                setPageDuplicateError('');
+                setShowAddPageModal(false);
+            } else {
+                // Error occurred - check store error
+                if (storeError) {
+                    setPageDuplicateError(storeError.includes('already exists') || storeError.includes('duplicate') 
+                        ? storeError 
+                        : `Failed to create page: ${storeError}`);
+                } else {
+                    setPageDuplicateError('Failed to create page. Please try again.');
+                }
+            }
+        } catch (error: any) {
+            // Handle backend error
+            if (error.message?.includes('already exists') || error.message?.includes('duplicate')) {
+                setPageDuplicateError(error.message);
+            } else {
+                setPageDuplicateError(`Failed to create page: ${error.message || 'Unknown error'}`);
+            }
+        } finally {
+            setIsAddingPage(false);
         }
     };
 
-    const handleUpdateSettings = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!projectId || !editName.trim() || !editWebsiteUrl.trim()) return;
-
-        setIsSavingSettings(true);
-        try {
-            await useProjectStore.getState().updateProject(projectId, {
-                name: editName,
-                website_url: editWebsiteUrl,
-                description: editDescription,
-                google_drive_url: editDriveUrl,
-            });
-            setShowSettingsModal(false);
-        } catch (error) {
-            console.error('Error updating project settings:', error);
-        } finally {
-            setIsSavingSettings(false);
+    const handleOpenSettings = () => {
+        if (projectId) {
+            navigate(`/projects/${projectId}/settings`);
         }
     };
 
@@ -186,7 +199,10 @@ const ProjectDetailPage: React.FC = () => {
                 </div>
                 {canCreatePage && (
                     <button
-                        onClick={() => setShowAddPageModal(true)}
+                        onClick={() => {
+                            setPageDuplicateError('');
+                            setShowAddPageModal(true);
+                        }}
                         className="flex items-center gap-2 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 transition-smooth font-medium text-sm"
                     >
                         <Plus size={16} />
@@ -245,10 +261,24 @@ const ProjectDetailPage: React.FC = () => {
 
             {/* Add Page Modal */}
             {showAddPageModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                    <div 
+                        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                        onClick={() => {
+                            setShowAddPageModal(false);
+                            setPageDuplicateError('');
+                        }}
+                    >
+                    <div 
+                        className="bg-white rounded-lg p-6 w-full max-w-md mx-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <h2 className="text-xl font-semibold mb-4">Add New Page</h2>
                         <form onSubmit={handleAddPage} className="space-y-4">
+                            {pageDuplicateError && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                                    <p className="text-sm text-red-700">{pageDuplicateError}</p>
+                                </div>
+                            )}
                             <div>
                                 <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
                                     Page Name *
@@ -257,9 +287,18 @@ const ProjectDetailPage: React.FC = () => {
                                     type="text"
                                     placeholder="e.g., Home Page, About Us"
                                     value={newPageName}
-                                    onChange={(e) => handleNameChange(e.target.value)}
+                                    onChange={(e) => {
+                                        handleNameChange(e.target.value);
+                                        if (pageDuplicateError) {
+                                            setPageDuplicateError('');
+                                        }
+                                    }}
                                     required
-                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] ${
+                                        pageDuplicateError 
+                                            ? 'border-red-500 focus:ring-red-500' 
+                                            : 'border-[var(--color-border)]'
+                                    }`}
                                 />
                             </div>
                             <div>
@@ -270,100 +309,48 @@ const ProjectDetailPage: React.FC = () => {
                                     type="text"
                                     placeholder="e.g., home, about-us"
                                     value={newPageSlug}
-                                    onChange={(e) => setNewPageSlug(e.target.value)}
+                                    onChange={(e) => {
+                                        setNewPageSlug(e.target.value);
+                                        if (pageDuplicateError) {
+                                            setPageDuplicateError('');
+                                        }
+                                    }}
                                     required
-                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] ${
+                                        pageDuplicateError 
+                                            ? 'border-red-500 focus:ring-red-500' 
+                                            : 'border-[var(--color-border)]'
+                                    }`}
                                 />
+                                <p className="mt-1 text-xs text-gray-500">URL-friendly identifier (lowercase, hyphens only)</p>
                             </div>
                             <div className="flex gap-3 pt-2">
                                 <button
                                     type="button"
-                                    onClick={() => setShowAddPageModal(false)}
-                                    className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md text-[var(--color-text-secondary)] hover:bg-gray-50 transition-smooth"
+                                    onClick={() => {
+                                        setShowAddPageModal(false);
+                                        setPageDuplicateError('');
+                                        setNewPageName('');
+                                        setNewPageSlug('');
+                                    }}
+                                    disabled={isAddingPage}
+                                    className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md text-[var(--color-text-secondary)] hover:bg-gray-50 transition-smooth disabled:opacity-50"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 transition-smooth"
+                                    disabled={isAddingPage || !!pageDuplicateError}
+                                    className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 transition-smooth disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                 >
-                                    Add Page
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-            {/* Project Settings Modal */}
-            {showSettingsModal && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-lg mx-4">
-                        <h2 className="text-xl font-semibold mb-4">Project Settings</h2>
-                        <form onSubmit={handleUpdateSettings} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-                                    Project Name *
-                                </label>
-                                <input
-                                    type="text"
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    required
-                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-                                    Website URL *
-                                </label>
-                                <input
-                                    type="url"
-                                    value={editWebsiteUrl}
-                                    onChange={(e) => setEditWebsiteUrl(e.target.value)}
-                                    required
-                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-                                    Description
-                                </label>
-                                <textarea
-                                    value={editDescription}
-                                    onChange={(e) => setEditDescription(e.target.value)}
-                                    rows={3}
-                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1">
-                                    Google Drive Folder URL
-                                </label>
-                                <input
-                                    type="url"
-                                    placeholder="https://drive.google.com/drive/folders/..."
-                                    value={editDriveUrl}
-                                    onChange={(e) => setEditDriveUrl(e.target.value)}
-                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                />
-                                <p className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
-                                    Provide the URL of the folder containing Brand Strategy ("report") and Digital Trailmap documents.
-                                </p>
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowSettingsModal(false)}
-                                    className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md text-[var(--color-text-secondary)] hover:bg-gray-50 transition-smooth"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isSavingSettings}
-                                    className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 transition-smooth disabled:opacity-50"
-                                >
-                                    {isSavingSettings ? 'Saving...' : 'Save Settings'}
+                                    {isAddingPage ? (
+                                        <>
+                                            <Loader2 size={16} className="animate-spin" />
+                                            Adding...
+                                        </>
+                                    ) : (
+                                        'Add Page'
+                                    )}
                                 </button>
                             </div>
                         </form>

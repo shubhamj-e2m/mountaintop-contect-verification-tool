@@ -17,13 +17,20 @@ const PageDetailPage: React.FC = () => {
     const { projectId, pageId } = useParams<{ projectId: string; pageId: string }>();
     const navigate = useNavigate();
     const { user } = useAuth();
-    const { projects, uploadSEOKeywords, uploadContent, approveContent, rejectContent, requestRevision, fetchProjectById, deletePage } = useProjectStore();
+    const projects = useProjectStore(state => state.projects);
+    const uploadSEOKeywords = useProjectStore(state => state.uploadSEOKeywords);
+    const uploadContent = useProjectStore(state => state.uploadContent);
+    const approveContent = useProjectStore(state => state.approveContent);
+    const rejectContent = useProjectStore(state => state.rejectContent);
+    const requestRevision = useProjectStore(state => state.requestRevision);
+    const fetchProjectById = useProjectStore(state => state.fetchProjectById);
+    const deletePage = useProjectStore(state => state.deletePage);
 
-    const [showSEOModal, setShowSEOModal] = useState(false);
-    const [showContentModal, setShowContentModal] = useState(false);
     const [showRevisionModal, setShowRevisionModal] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [newComment, setNewComment] = useState('');
+    const [isEditingSEO, setIsEditingSEO] = useState(false);
+    const [isEditingContent, setIsEditingContent] = useState(false);
 
     // Form state
     const [primaryKeywordsInput, setPrimaryKeywordsInput] = useState('');
@@ -40,6 +47,7 @@ const PageDetailPage: React.FC = () => {
     const [keywordMetrics, setKeywordMetrics] = useState<Record<string, any>>({});
     const [csvError, setCsvError] = useState<string>('');
     const [analysisError, setAnalysisError] = useState<string>('');
+    const [keywordDuplicateError, setKeywordDuplicateError] = useState<string>('');
     const [analysisProgress, setAnalysisProgress] = useState<{
         step: number;
         message: string;
@@ -83,15 +91,34 @@ const PageDetailPage: React.FC = () => {
     // Poll for analysis completion when status is processing or pending_review but analysis not loaded
     // Also poll if analysis exists but status is still 'processing' (edge case)
     useEffect(() => {
+        // Only poll if tab is visible
+        const isTabVisible = !document.hidden;
+        if (!isTabVisible) return;
+
         const isProcessing = page?.status === 'processing';
         const hasAnalysisButStillProcessing = isProcessing && page?.analysis;
         const needsPolling = isProcessing && !page?.analysis;
         const isPendingReviewWithoutAnalysis = page?.status === 'pending_review' && !page.analysis;
 
+        // Stop polling if analysis is complete
+        if (page?.analysis && page?.status !== 'processing') {
+            setAnalysisProgress({ step: 6, message: 'Analysis complete!', progress: 100 });
+            return;
+        }
+
         if (needsPolling || isPendingReviewWithoutAnalysis || hasAnalysisButStillProcessing) {
+            let pollCount = 0;
+            const getPollInterval = () => {
+                // Exponential backoff: 5s, 10s, 20s
+                if (pollCount < 3) return 5000;
+                if (pollCount < 6) return 10000;
+                return 20000;
+            };
+
             // If analysis exists but status is stuck at processing, just poll to refresh
             if (hasAnalysisButStillProcessing) {
                 const pollInterval = setInterval(async () => {
+                    pollCount++;
                     try {
                         if (projectId) {
                             await fetchProjectById(projectId);
@@ -99,7 +126,7 @@ const PageDetailPage: React.FC = () => {
                     } catch (error) {
                         console.error('Error polling for status update:', error);
                     }
-                }, 2000);
+                }, getPollInterval());
                 return () => clearInterval(pollInterval);
             }
 
@@ -122,8 +149,9 @@ const PageDetailPage: React.FC = () => {
                     }
                 }, 2000); // Update every 2 seconds
 
-                // Poll for actual analysis completion
+                // Poll for actual analysis completion with exponential backoff
                 const pollInterval = setInterval(async () => {
+                    pollCount++;
                     try {
                         // Refresh project data to check if analysis is complete
                         if (projectId) {
@@ -132,15 +160,16 @@ const PageDetailPage: React.FC = () => {
                     } catch (error) {
                         console.error('Error polling for analysis:', error);
                     }
-                }, 3000); // Poll every 3 seconds
+                }, getPollInterval());
 
                 return () => {
                     clearInterval(progressInterval);
                     clearInterval(pollInterval);
                 };
             } else {
-                // Status is pending_review but analysis not loaded - just poll to refresh
+                // Status is pending_review but analysis not loaded - just poll to refresh with exponential backoff
                 const pollInterval = setInterval(async () => {
+                    pollCount++;
                     try {
                         if (projectId) {
                             await fetchProjectById(projectId);
@@ -148,7 +177,7 @@ const PageDetailPage: React.FC = () => {
                     } catch (error) {
                         console.error('Error polling for analysis:', error);
                     }
-                }, 2000); // Poll more frequently when waiting for results
+                }, getPollInterval());
 
                 return () => {
                     clearInterval(pollInterval);
@@ -374,20 +403,76 @@ const PageDetailPage: React.FC = () => {
 
 
     // Handlers
+    // Check for duplicate keywords
+    const checkDuplicateKeywords = (
+        primaryKeywords: string[],
+        secondaryKeywords: string[]
+    ): string | null => {
+        // Normalize keywords (lowercase, trim) for comparison
+        const normalize = (keyword: string) => keyword.toLowerCase().trim();
+        
+        // Check for duplicates within primary keywords
+        const primaryNormalized = primaryKeywords.map(normalize);
+        const primaryDuplicates = primaryNormalized.filter((k, i) => primaryNormalized.indexOf(k) !== i);
+        if (primaryDuplicates.length > 0) {
+            const uniqueDuplicates = [...new Set(primaryDuplicates)];
+            return `Duplicate primary keywords found: ${uniqueDuplicates.join(', ')}. Each keyword should be unique.`;
+        }
+
+        // Check for duplicates within secondary keywords
+        const secondaryNormalized = secondaryKeywords.map(normalize);
+        const secondaryDuplicates = secondaryNormalized.filter((k, i) => secondaryNormalized.indexOf(k) !== i);
+        if (secondaryDuplicates.length > 0) {
+            const uniqueDuplicates = [...new Set(secondaryDuplicates)];
+            return `Duplicate secondary keywords found: ${uniqueDuplicates.join(', ')}. Each keyword should be unique.`;
+        }
+
+        // Check for keywords that appear in both primary and secondary
+        const commonKeywords = primaryNormalized.filter(k => secondaryNormalized.includes(k));
+        if (commonKeywords.length > 0) {
+            return `The following keywords appear in both primary and secondary lists: ${commonKeywords.join(', ')}. A keyword should be either primary or secondary, not both.`;
+        }
+
+        // Check for duplicates with existing keywords (if page has existing SEO data)
+        if (page?.seo_data) {
+            const existingPrimary = (page.seo_data.primaryKeywords || []).map(normalize);
+            const existingSecondary = (page.seo_data.secondaryKeywords || []).map(normalize);
+            const allExisting = [...existingPrimary, ...existingSecondary];
+
+            const duplicatesWithExisting = [
+                ...primaryNormalized.filter(k => allExisting.includes(k)),
+                ...secondaryNormalized.filter(k => allExisting.includes(k))
+            ];
+
+            if (duplicatesWithExisting.length > 0) {
+                const uniqueDuplicates = [...new Set(duplicatesWithExisting)];
+                return `The following keywords already exist on this page: ${uniqueDuplicates.join(', ')}. Please use different keywords.`;
+            }
+        }
+
+        return null;
+    };
+
     const handleSEOUpload = (e: React.FormEvent) => {
         e.preventDefault();
         if (!primaryKeywordsInput.trim() || !projectId || !pageId || !user) return;
 
         const primaryKeywords = primaryKeywordsInput.split('\n').map(k => k.trim()).filter(k => k);
         const secondaryKeywords = secondaryKeywordsInput.split('\n').map(k => k.trim()).filter(k => k);
+
+        // Check for duplicates
+        const duplicateError = checkDuplicateKeywords(primaryKeywords, secondaryKeywords);
+        if (duplicateError) {
+            setKeywordDuplicateError(duplicateError);
+            return;
+        }
+
+        setKeywordDuplicateError('');
         uploadSEOKeywords(projectId, pageId, primaryKeywords, secondaryKeywords);
 
         setPrimaryKeywordsInput('');
         setSecondaryKeywordsInput('');
-        setShowSEOModal(false);
-
-        if (hasContent) {
-        }
+        setIsEditingSEO(false);
     };
 
     const handleContentUpload = (e: React.FormEvent) => {
@@ -413,10 +498,7 @@ const PageDetailPage: React.FC = () => {
         setContentH3s('');
         setContentParagraphs('');
         setSheetUrl('');
-        setShowContentModal(false);
-
-        if (hasSEO) {
-        }
+        setIsEditingContent(false);
     };
 
     const handleApprove = () => {
@@ -432,6 +514,13 @@ const PageDetailPage: React.FC = () => {
     const handleRevisionRequest = (e: React.FormEvent) => {
         e.preventDefault();
         if (!projectId || !pageId) return;
+        
+        // Validate that at least one option is selected
+        if (!revisionSEO && !revisionContent) {
+            alert('Please select at least one revision type (SEO or Content)');
+            return;
+        }
+        
         requestRevision(projectId, pageId, revisionSEO, revisionContent);
         setShowRevisionModal(false);
     };
@@ -630,12 +719,13 @@ const PageDetailPage: React.FC = () => {
                                 <Tag size={20} className="text-[var(--color-accent)]" />
                                 <h2 className="text-lg font-semibold">SEO Keywords</h2>
                             </div>
-                            {(isSEOAnalyst || isAdmin) && (
+                            {(isSEOAnalyst || isAdmin) && !isEditingSEO && (
                                 <button
                                     onClick={() => {
                                         setPrimaryKeywordsInput(page.seo_data?.primaryKeywords?.join('\n') || '');
                                         setSecondaryKeywordsInput(page.seo_data?.secondaryKeywords?.join('\n') || '');
-                                        setShowSEOModal(true);
+                                        setKeywordDuplicateError('');
+                                        setIsEditingSEO(true);
                                     }}
                                     className="px-3 py-1.5 text-sm bg-[var(--color-accent)] text-white rounded-md hover:opacity-90"
                                 >
@@ -644,7 +734,77 @@ const PageDetailPage: React.FC = () => {
                             )}
                         </div>
 
-                        {hasSEO ? (
+                        {isEditingSEO && (isSEOAnalyst || isAdmin) ? (
+                            <form onSubmit={handleSEOUpload} className="space-y-4">
+                                {keywordDuplicateError && (
+                                    <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                                        <p className="text-sm text-red-700">{keywordDuplicateError}</p>
+                                    </div>
+                                )}
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Primary Keywords (one per line) *</label>
+                                    <p className="text-xs text-gray-500 mb-2">High-priority target keywords (1-3 recommended)</p>
+                                    <textarea
+                                        rows={4}
+                                        placeholder="industrial pumps&#10;velocity pumps"
+                                        value={primaryKeywordsInput}
+                                        onChange={(e) => {
+                                            setPrimaryKeywordsInput(e.target.value);
+                                            if (keywordDuplicateError) {
+                                                setKeywordDuplicateError('');
+                                            }
+                                        }}
+                                        required
+                                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] ${
+                                            keywordDuplicateError 
+                                                ? 'border-red-500 focus:ring-red-500' 
+                                                : 'border-[var(--color-border)]'
+                                        }`}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Secondary Keywords (one per line)</label>
+                                    <p className="text-xs text-gray-500 mb-2">Supporting/long-tail keywords</p>
+                                    <textarea
+                                        rows={4}
+                                        placeholder="high-pressure systems&#10;pump manufacturer"
+                                        value={secondaryKeywordsInput}
+                                        onChange={(e) => {
+                                            setSecondaryKeywordsInput(e.target.value);
+                                            if (keywordDuplicateError) {
+                                                setKeywordDuplicateError('');
+                                            }
+                                        }}
+                                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] ${
+                                            keywordDuplicateError 
+                                                ? 'border-red-500 focus:ring-red-500' 
+                                                : 'border-[var(--color-border)]'
+                                        }`}
+                                    />
+                                </div>
+                                <div className="flex gap-3 pt-2">
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setIsEditingSEO(false);
+                                            setKeywordDuplicateError('');
+                                            setPrimaryKeywordsInput('');
+                                            setSecondaryKeywordsInput('');
+                                        }}
+                                        className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md hover:bg-gray-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        type="submit" 
+                                        disabled={!!keywordDuplicateError}
+                                        className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {hasSEO ? 'Update' : 'Upload'} Keywords
+                                    </button>
+                                </div>
+                            </form>
+                        ) : hasSEO ? (
                             <div className="space-y-4">
                                 {/* Primary Keywords */}
                                 <div>
@@ -770,7 +930,7 @@ const PageDetailPage: React.FC = () => {
                                 <FileText size={20} className="text-[var(--color-accent)]" />
                                 <h2 className="text-lg font-semibold">Page Content</h2>
                             </div>
-                            {(isContentWriter || isAdmin) && (
+                            {(isContentWriter || isAdmin) && !isEditingContent && (
                                 <button
                                     onClick={() => {
                                         if (page.content_data) {
@@ -780,8 +940,9 @@ const PageDetailPage: React.FC = () => {
                                             setContentH2s(page.content_data.parsed_content.h2?.join('\n') || '');
                                             setContentH3s(page.content_data.parsed_content.h3?.join('\n') || '');
                                             setContentParagraphs(page.content_data.parsed_content.paragraphs?.join('\n\n') || '');
+                                            setSheetUrl(page.content_data.google_sheet_url || '');
                                         }
-                                        setShowContentModal(true);
+                                        setIsEditingContent(true);
                                     }}
                                     className="px-3 py-1.5 text-sm bg-[var(--color-accent)] text-white rounded-md hover:opacity-90"
                                 >
@@ -790,7 +951,144 @@ const PageDetailPage: React.FC = () => {
                             )}
                         </div>
 
-                        {hasContent ? (
+                        {isEditingContent && (isContentWriter || isAdmin) ? (
+                            <form onSubmit={handleContentUpload} className="space-y-4">
+                                {/* File Upload Section */}
+                                <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-lg p-4">
+                                    <p className="text-sm font-medium text-blue-800 mb-2">📄 Upload CSV or Excel File</p>
+                                    <div className="flex gap-4 items-end">
+                                        <input
+                                            type="file"
+                                            accept=".csv,.xlsx,.xls"
+                                            onChange={handleCSVUpload}
+                                            className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer"
+                                        />
+                                        <a
+                                            href="/sample_content_template.csv"
+                                            download
+                                            className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+                                        >
+                                            ⬇️ Download CSV template
+                                        </a>
+                                    </div>
+                                    {csvError && <p className="text-xs text-red-600 mt-1">{csvError}</p>}
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Google Sheet URL (optional)</label>
+                                    <input
+                                        type="url"
+                                        placeholder="https://docs.google.com/spreadsheets/d/..."
+                                        value={sheetUrl}
+                                        onChange={(e) => setSheetUrl(e.target.value)}
+                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                    />
+                                </div>
+
+                                <div className="border-t border-[var(--color-border)] pt-4">
+                                    <p className="text-sm font-medium mb-3">Or enter content manually:</p>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        {/* Left Column */}
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Meta Title</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Page title for search engines"
+                                                    value={contentMetaTitle}
+                                                    onChange={(e) => setContentMetaTitle(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">Meta Description</label>
+                                                <textarea
+                                                    rows={3}
+                                                    placeholder="Brief description for search results"
+                                                    value={contentMetaDesc}
+                                                    onChange={(e) => setContentMetaDesc(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">H1 Heading *</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Main page heading"
+                                                    value={contentH1}
+                                                    onChange={(e) => setContentH1(e.target.value)}
+                                                    required
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Right Column */}
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">H2 Headings (one per line)</label>
+                                                <textarea
+                                                    rows={3}
+                                                    placeholder="Section heading 1&#10;Section heading 2"
+                                                    value={contentH2s}
+                                                    onChange={(e) => setContentH2s(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">H3 Headings (one per line)</label>
+                                                <textarea
+                                                    rows={3}
+                                                    placeholder="Sub heading 1&#10;Sub heading 2"
+                                                    value={contentH3s}
+                                                    onChange={(e) => setContentH3s(e.target.value)}
+                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Body Content - Full Width */}
+                                    <div className="mt-3">
+                                        <label className="block text-sm font-medium mb-1">Body Content (paragraphs separated by blank line)</label>
+                                        <textarea
+                                            rows={4}
+                                            placeholder="First paragraph...&#10;&#10;Second paragraph..."
+                                            value={contentParagraphs}
+                                            onChange={(e) => setContentParagraphs(e.target.value)}
+                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 pt-2">
+                                    <button 
+                                        type="button" 
+                                        onClick={() => {
+                                            setIsEditingContent(false);
+                                            setContentMetaTitle('');
+                                            setContentMetaDesc('');
+                                            setContentH1('');
+                                            setContentH2s('');
+                                            setContentH3s('');
+                                            setContentParagraphs('');
+                                            setSheetUrl('');
+                                            setCsvError('');
+                                        }}
+                                        className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md hover:bg-gray-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        type="submit" 
+                                        className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90"
+                                    >
+                                        {hasContent ? 'Update' : 'Upload'} Content
+                                    </button>
+                                </div>
+                            </form>
+                        ) : hasContent ? (
                             <div className="space-y-4">
                                 {/* Tag-wise content breakdown - shown to all roles */}
                                 {/* META Title */}
@@ -1621,185 +1919,18 @@ const PageDetailPage: React.FC = () => {
                 )
             }
 
-            {/* SEO Upload Modal */}
-            {
-                showSEOModal && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-                            <h2 className="text-xl font-semibold mb-4">Upload SEO Keywords</h2>
-                            <form onSubmit={handleSEOUpload} className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Primary Keywords (one per line) *</label>
-                                    <p className="text-xs text-gray-500 mb-2">High-priority target keywords (1-3 recommended)</p>
-                                    <textarea
-                                        rows={4}
-                                        placeholder="industrial pumps&#10;velocity pumps"
-                                        value={primaryKeywordsInput}
-                                        onChange={(e) => setPrimaryKeywordsInput(e.target.value)}
-                                        required
-                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Secondary Keywords (one per line)</label>
-                                    <p className="text-xs text-gray-500 mb-2">Supporting/long-tail keywords</p>
-                                    <textarea
-                                        rows={4}
-                                        placeholder="high-pressure systems&#10;pump manufacturer"
-                                        value={secondaryKeywordsInput}
-                                        onChange={(e) => setSecondaryKeywordsInput(e.target.value)}
-                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                    />
-                                </div>
-                                <div className="flex gap-3 pt-2">
-                                    <button type="button" onClick={() => setShowSEOModal(false)} className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md hover:bg-gray-50">
-                                        Cancel
-                                    </button>
-                                    <button type="submit" className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90">
-                                        Upload Keywords
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* Content Upload Modal */}
-            {
-                showContentModal && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-4">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-7xl mx-4 my-4">
-                            <h2 className="text-xl font-semibold mb-4">Upload Page Content</h2>
-                            <form onSubmit={handleContentUpload} className="space-y-4">
-                                {/* File Upload Section */}
-                                <div className="bg-blue-50 border-2 border-dashed border-blue-200 rounded-lg p-4">
-                                    <p className="text-sm font-medium text-blue-800 mb-2">📄 Upload CSV or Excel File</p>
-                                    <div className="flex gap-4 items-end">
-                                        <input
-                                            type="file"
-                                            accept=".csv,.xlsx,.xls"
-                                            onChange={handleCSVUpload}
-                                            className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 cursor-pointer"
-                                        />
-                                        <a
-                                            href="/sample_content_template.csv"
-                                            download
-                                            className="text-xs text-blue-600 hover:underline whitespace-nowrap"
-                                        >
-                                            ⬇️ Download CSV template
-                                        </a>
-                                    </div>
-                                    {csvError && <p className="text-xs text-red-600 mt-1">{csvError}</p>}
-                                </div>
-
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Google Sheet URL (optional)</label>
-                                    <input
-                                        type="url"
-                                        placeholder="https://docs.google.com/spreadsheets/d/..."
-                                        value={sheetUrl}
-                                        onChange={(e) => setSheetUrl(e.target.value)}
-                                        className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                    />
-                                </div>
-
-                                <div className="border-t border-[var(--color-border)] pt-4">
-                                    <p className="text-sm font-medium mb-3">Or enter content manually:</p>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        {/* Left Column */}
-                                        <div className="space-y-3">
-                                            <div>
-                                                <label className="block text-sm font-medium mb-1">Meta Title</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Page title for search engines"
-                                                    value={contentMetaTitle}
-                                                    onChange={(e) => setContentMetaTitle(e.target.value)}
-                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium mb-1">Meta Description</label>
-                                                <textarea
-                                                    rows={3}
-                                                    placeholder="Brief description for search results"
-                                                    value={contentMetaDesc}
-                                                    onChange={(e) => setContentMetaDesc(e.target.value)}
-                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium mb-1">H1 Heading *</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Main page heading"
-                                                    value={contentH1}
-                                                    onChange={(e) => setContentH1(e.target.value)}
-                                                    required
-                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Right Column */}
-                                        <div className="space-y-3">
-                                            <div>
-                                                <label className="block text-sm font-medium mb-1">H2 Headings (one per line)</label>
-                                                <textarea
-                                                    rows={3}
-                                                    placeholder="Section heading 1&#10;Section heading 2"
-                                                    value={contentH2s}
-                                                    onChange={(e) => setContentH2s(e.target.value)}
-                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-sm font-medium mb-1">H3 Headings (one per line)</label>
-                                                <textarea
-                                                    rows={3}
-                                                    placeholder="Sub heading 1&#10;Sub heading 2"
-                                                    value={contentH3s}
-                                                    onChange={(e) => setContentH3s(e.target.value)}
-                                                    className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Body Content - Full Width */}
-                                    <div className="mt-3">
-                                        <label className="block text-sm font-medium mb-1">Body Content (paragraphs separated by blank line)</label>
-                                        <textarea
-                                            rows={4}
-                                            placeholder="First paragraph...&#10;&#10;Second paragraph..."
-                                            value={contentParagraphs}
-                                            onChange={(e) => setContentParagraphs(e.target.value)}
-                                            className="w-full px-3 py-2 border border-[var(--color-border)] rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex gap-3 pt-2">
-                                    <button type="button" onClick={() => setShowContentModal(false)} className="flex-1 px-4 py-2 border border-[var(--color-border)] rounded-md hover:bg-gray-50">
-                                        Cancel
-                                    </button>
-                                    <button type="submit" className="flex-1 px-4 py-2 bg-[var(--color-accent)] text-white rounded-md hover:opacity-90">
-                                        Upload Content
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                )
-            }
 
             {/* Revision Request Modal */}
             {
                 showRevisionModal && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                    <div 
+                        className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+                        onClick={() => setShowRevisionModal(false)}
+                    >
+                        <div 
+                            className="bg-white rounded-lg p-6 w-full max-w-md mx-4"
+                            onClick={(e) => e.stopPropagation()}
+                        >
                             <h2 className="text-xl font-semibold mb-4">Request Revision</h2>
                             <form onSubmit={handleRevisionRequest} className="space-y-4">
                                 <p className="text-[var(--color-text-secondary)]">Select what needs to be revised:</p>

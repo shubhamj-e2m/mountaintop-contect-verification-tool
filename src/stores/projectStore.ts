@@ -33,9 +33,11 @@ interface ProjectState {
     projects: Project[];
     isLoading: boolean;
     error: string | null;
+    lastFetched: number | null;
+    fetchingPromise: Promise<void> | null;
 
     // Fetch operations
-    fetchProjects: () => Promise<void>;
+    fetchProjects: (shouldRefetch?: boolean) => Promise<void>;
     fetchProjectById: (projectId: string) => Promise<Project | null>;
 
     // Project operations
@@ -153,21 +155,54 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     projects: [],
     isLoading: false,
     error: null,
+    lastFetched: null,
+    fetchingPromise: null,
 
-    fetchProjects: async () => {
-        console.log('fetchProjects: starting...');
-        set({ isLoading: true, error: null });
-        try {
-            console.log('fetchProjects: calling getProjects()...');
-            const dbProjects = await getProjects();
-            console.log('fetchProjects: got projects:', dbProjects);
-            const projects = dbProjects.map(convertDbProjectToApp);
-            console.log('fetchProjects: converted projects:', projects);
-            set({ projects, isLoading: false });
-        } catch (error: any) {
-            console.error('fetchProjects: Error:', error);
-            set({ error: error.message, isLoading: false });
+    fetchProjects: async (shouldRefetch = false) => {
+        const state = get();
+        const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+        const now = Date.now();
+
+        // Check cache - return cached data if fresh and not forcing refetch
+        if (!shouldRefetch && state.lastFetched && (now - state.lastFetched) < CACHE_DURATION && state.projects.length > 0) {
+            console.log('fetchProjects: Using cached data');
+            return;
         }
+
+        // Prevent duplicate simultaneous requests
+        if (state.fetchingPromise) {
+            console.log('fetchProjects: Already fetching, waiting for existing request...');
+            await state.fetchingPromise;
+            return;
+        }
+
+        console.log('fetchProjects: starting...');
+        const fetchPromise = (async () => {
+            set({ isLoading: true, error: null });
+            try {
+                console.log('fetchProjects: calling getProjects()...');
+                const dbProjects = await getProjects();
+                console.log('fetchProjects: got projects:', dbProjects);
+                const projects = dbProjects.map(convertDbProjectToApp);
+                console.log('fetchProjects: converted projects:', projects);
+                set({ 
+                    projects, 
+                    isLoading: false, 
+                    lastFetched: Date.now(),
+                    fetchingPromise: null,
+                });
+            } catch (error: any) {
+                console.error('fetchProjects: Error:', error);
+                set({ 
+                    error: error.message, 
+                    isLoading: false,
+                    fetchingPromise: null,
+                });
+            }
+        })();
+
+        set({ fetchingPromise: fetchPromise });
+        await fetchPromise;
     },
 
     fetchProjectById: async (projectId: string) => {
@@ -462,10 +497,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         }
     },
 
-    requestRevision: async (projectId, pageId, _reviseSEO, _reviseContent) => {
+    requestRevision: async (projectId, pageId, reviseSEO, reviseContent) => {
         set({ isLoading: true, error: null });
         try {
-            await requestRevisionAPI(pageId);
+            await requestRevisionAPI(pageId, reviseSEO, reviseContent);
+
+            // Determine the appropriate status based on what needs revision
+            let newStatus: PageStatus;
+            if (reviseSEO && reviseContent) {
+                newStatus = 'revision_requested';
+            } else if (reviseSEO) {
+                newStatus = 'awaiting_seo';
+            } else {
+                newStatus = 'awaiting_content';
+            }
 
             set((state) => ({
                 projects: state.projects.map((p) =>
@@ -473,7 +518,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
                         ? {
                             ...p,
                             pages: p.pages?.map((pg) =>
-                                pg.id === pageId ? { ...pg, status: 'revision_requested' as PageStatus } : pg
+                                pg.id === pageId ? { ...pg, status: newStatus } : pg
                             ),
                         }
                         : p

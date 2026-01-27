@@ -1,5 +1,6 @@
 import { apiClient } from '../lib/apiClient';
 import type { Database } from '../lib/database.types';
+import type { User } from '../types/user';
 
 type Project = Database['public']['Tables']['projects']['Row'];
 // type ProjectInsert = Database['public']['Tables']['projects']['Insert'];
@@ -53,44 +54,35 @@ interface MemberBasic {
 
 /**
  * Get all projects accessible to the current user
+ * Uses bulk endpoint to fetch all projects with pages in a single request
  */
 export async function getProjects(): Promise<ProjectWithDetails[]> {
     try {
-        const projects = await apiClient.get<Project[]>('/projects');
+        // Use ?withPages=true to get all projects with pages in one optimized request
+        const projectsWithPages = await apiClient.get<Array<Project & {
+            pages: Array<{
+                page: PageBasic;
+                seo_data?: any;
+                content_data?: any;
+                analysis_results?: any;
+            }>;
+        }>>('/projects?withPages=true');
 
-        // For each project, fetch pages with data in bulk (optimized to avoid N+1)
-        const projectsWithData = await Promise.all(projects.map(async (project) => {
-            try {
-                // Use ?withData=true to get all page data in one request
-                const pagesWithData = await apiClient.get<Array<{
-                    page: PageBasic;
-                    seo_data?: any;
-                    content_data?: any;
-                    analysis_results?: any;
-                }>>(`/pages/projects/${project.id}/pages?withData=true`);
+        // Transform the response to match expected format
+        const projectsWithData = projectsWithPages.map((project) => {
+            const pages = project.pages.map(item => ({
+                ...item.page,
+                seo_data: item.seo_data || null,
+                content_data: item.content_data || null,
+                analysis_results: item.analysis_results || null,
+            }));
 
-                // Transform the response to match expected format
-                const pages = pagesWithData.map(item => ({
-                    ...item.page,
-                    seo_data: item.seo_data || null,
-                    content_data: item.content_data || null,
-                    analysis_results: item.analysis_results || null,
-                }));
-
-                return {
-                    ...project,
-                    pages: pages,
-                    members: [], // Will be fetched separately if needed
-                };
-            } catch (error) {
-                console.error(`Error fetching pages for project ${project.id}:`, error);
-                return {
-                    ...project,
-                    pages: [],
-                    members: [],
-                };
-            }
-        }));
+            return {
+                ...project,
+                pages: pages,
+                members: [], // Will be fetched separately if needed
+            };
+        });
 
         return projectsWithData;
     } catch (error) {
@@ -124,8 +116,8 @@ export async function getProjectById(projectId: string): Promise<ProjectWithDeta
             analysis_results: item.analysis_results || null,
         }));
 
-        // Fetch members
-        const members = await apiClient.get<MemberBasic[]>(`/projects/${projectId}/members`);
+        // Fetch members with user details
+        const members = await apiClient.get<Array<MemberBasic & { user: { id: string; name: string; email: string; role: string; avatar_url?: string | null } }>>(`/projects/${projectId}/members`);
 
         return {
             ...project,
@@ -213,6 +205,47 @@ export async function addProjectMember(
         });
     } catch (error) {
         console.error('Error adding project member:', error);
+        throw error;
+    }
+}
+
+/**
+ * Remove a member from a project
+ */
+export async function removeProjectMember(
+    projectId: string,
+    userId: string
+): Promise<void> {
+    try {
+        await apiClient.delete(`/projects/${projectId}/members/${userId}`);
+    } catch (error) {
+        console.error('Error removing project member:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get project members with user details
+ */
+export async function getProjectMembers(projectId: string): Promise<Array<{ id: string; user_id: string; role: string; user: { id: string; name: string; email: string; role: string; avatar_url?: string | null } }>> {
+    try {
+        const members = await apiClient.get<Array<{ id: string; user_id: string; role: string; user: { id: string; name: string; email: string; role: string; avatar_url?: string | null } }>>(`/projects/${projectId}/members`);
+        return members;
+    } catch (error) {
+        console.error('Error fetching project members:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get all users for project assignment (Admin/SEO Analyst only)
+ */
+export async function getUsersForAssignment(): Promise<User[]> {
+    try {
+        const users = await apiClient.get<User[]>('/projects/users');
+        return users;
+    } catch (error) {
+        console.error('Error fetching users for assignment:', error);
         throw error;
     }
 }

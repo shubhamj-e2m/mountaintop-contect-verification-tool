@@ -39,9 +39,25 @@ export class ApiClient {
     }
   }
 
+  private async refreshToken(): Promise<string | null> {
+    try {
+      const { supabase } = await import('./supabase');
+      const { data: { session }, error } = await supabase.auth.refreshSession();
+      if (error) {
+        console.error('Error refreshing token:', error);
+        return null;
+      }
+      return session?.access_token || null;
+    } catch (error) {
+      console.error('Error refreshing token:', error);
+      return null;
+    }
+  }
+
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount = 0
   ): Promise<T> {
     const token = await this.getAuthToken();
     
@@ -59,6 +75,33 @@ export class ApiClient {
       ...options,
       headers,
     });
+
+    // Handle 401 Unauthorized - try refreshing token once
+    if (response.status === 401 && retryCount === 0) {
+      const newToken = await this.refreshToken();
+      if (newToken) {
+        // Retry the request with the new token
+        headers['Authorization'] = `Bearer ${newToken}`;
+        const retryResponse = await fetch(url, {
+          ...options,
+          headers,
+        });
+        
+        if (!retryResponse.ok) {
+          const error: ApiError = await retryResponse.json().catch(() => ({
+            error: { message: `HTTP ${retryResponse.status}: ${retryResponse.statusText}` },
+          }));
+          throw new Error(error.error.message);
+        }
+
+        // Handle 204 No Content
+        if (retryResponse.status === 204) {
+          return null as T;
+        }
+
+        return retryResponse.json();
+      }
+    }
 
     if (!response.ok) {
       const error: ApiError = await response.json().catch(() => ({
