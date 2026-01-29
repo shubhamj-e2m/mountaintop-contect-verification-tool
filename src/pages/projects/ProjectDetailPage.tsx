@@ -4,6 +4,7 @@ import { Plus, ExternalLink, Settings, ArrowLeft, Loader2 } from 'lucide-react';
 import StatusBadge from '../../components/ui/StatusBadge';
 import DataStatusIndicator from '../../components/ui/DataStatusIndicator';
 import TargetPersonasDisplay from '../../components/personas/TargetPersonasDisplay';
+import TrailmapPersonasDisplay from '../../components/personas/TrailmapPersonasDisplay';
 import { useProjectStore } from '../../stores/projectStore';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -183,6 +184,9 @@ const ProjectDetailPage: React.FC = () => {
 
             {/* Target Personas Section */}
             <TargetPersonasDisplay projectId={project.id} className="mb-6" />
+
+            {/* Customer Personas Section */}
+            <TrailmapPersonasDisplay projectId={project.id} className="mb-6" />
 
             {/* Filter Tabs and Add Page Button */}
             <div className="flex items-center justify-between mb-4">

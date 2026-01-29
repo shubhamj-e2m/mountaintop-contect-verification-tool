@@ -141,11 +141,43 @@ export interface AnalysisResult {
     primary_user_intent?: string;
     friction_points?: string[];
     critical_gaps?: string[];
-    customer_persona?: EnhancedCustomerPersona;
+    customer_persona?: EnhancedTargetMarketPersona;
 }
 
 /**
- * Customer Persona inferred from page content
+ * Target Market Persona - inferred from page content (new structure)
+ */
+export interface TargetMarketPersona {
+    name: string;
+    age: number;
+    location: string;
+    description: string;
+    communication_preferences: string;
+    influencers: string[];
+    goals: string[];
+    transformation: string;
+    pain_points: string[];
+    hesitations: string[];
+}
+
+/**
+ * Trailmap Customer Persona - extracted from Google Slides trailmap (new structure)
+ */
+export interface TrailmapCustomerPersona {
+    name: string;
+    age: number;
+    location: string;
+    description: string;
+    communication_preferences: string;
+    influencers: string[];
+    goals: string[];
+    transformation: string;
+    pain_points: string[];
+    hesitations: string[];
+}
+
+/**
+ * Legacy Customer Persona structure (for SME/Enterprise personas - backward compatibility)
  */
 export interface CustomerPersona {
     summary: string;
@@ -169,14 +201,29 @@ export interface CustomerPersona {
 }
 
 /**
- * Enhanced Customer Persona with target relevance scoring
+ * Persona Relevance Item for individual persona comparison
  */
-export interface EnhancedCustomerPersona extends CustomerPersona {
+export interface PersonaRelevanceItem {
+    persona_id: string;
+    persona_name: string;
+    relevance_score: number; // 0-100
+    match_points: string[]; // What matches
+    mismatch_points: string[]; // What doesn't match
+    confidence_level: 'high' | 'medium' | 'low';
+}
+
+/**
+ * Enhanced Target Market Persona with relevance scoring
+ */
+export interface EnhancedTargetMarketPersona extends TargetMarketPersona {
     target_relevance?: {
-        sme_score: number;        // 0-100
-        enterprise_score: number; // 0-100
-        primary_target: 'SME' | 'ENTERPRISE' | 'MIXED';
-        confidence_level: 'high' | 'medium' | 'low';
+        // SME/Enterprise relevance (for backward compatibility)
+        sme_score?: number;        // 0-100
+        enterprise_score?: number; // 0-100
+        primary_target?: 'SME' | 'ENTERPRISE' | 'MIXED';
+        confidence_level?: 'high' | 'medium' | 'low';
+        // Trailmap persona relevance
+        persona_relevance?: PersonaRelevanceItem[];
     };
 }
 
@@ -188,4 +235,17 @@ export interface TargetPersonaAnalysis {
     enterprise_persona: CustomerPersona;
     generated_at: string;
     source_documents: string[]; // ['trailmap', 'brand_strategy']
+}
+
+/**
+ * Trailmap Personas extracted from Google Slides trailmap
+ */
+export interface TrailmapPersonas {
+    personas: Array<{
+        id: string;
+        name: string;
+        persona: TrailmapCustomerPersona;
+    }>;
+    extracted_at: string;
+    source_document: string;
 }

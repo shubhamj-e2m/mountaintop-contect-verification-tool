@@ -242,7 +242,7 @@ const TargetPersonasDisplay: React.FC<TargetPersonasDisplayProps> = ({
                 >
                     <div className="flex items-center gap-2">
                         <Users size={18} className="text-[var(--color-accent)]" />
-                        <h3 className="font-semibold text-[var(--color-text-primary)]">Customer Personas</h3>
+                        <h3 className="font-semibold text-[var(--color-text-primary)]">Target Market</h3>
                         <span className="text-xs text-[var(--color-text-tertiary)] bg-[var(--color-bg-tertiary)] px-2 py-0.5 rounded">Not Available</span>
                     </div>
                     {isExpanded ? <ChevronUp size={16} className="text-[var(--color-text-secondary)]" /> : <ChevronDown size={16} className="text-[var(--color-text-secondary)]" />}
@@ -278,7 +278,7 @@ const TargetPersonasDisplay: React.FC<TargetPersonasDisplayProps> = ({
             >
                 <div className="flex items-center gap-2">
                     <Users size={18} className="text-[var(--color-accent)]" />
-                    <h3 className="font-semibold text-[var(--color-text-primary)]">Customer Personas</h3>
+                    <h3 className="font-semibold text-[var(--color-text-primary)]">Target Market</h3>
                     <div className="flex items-center gap-1 text-xs text-[var(--color-text-tertiary)]">
                         <Calendar size={12} />
                         <span>Generated {new Date(targetPersonas.generated_at).toLocaleDateString()}</span>

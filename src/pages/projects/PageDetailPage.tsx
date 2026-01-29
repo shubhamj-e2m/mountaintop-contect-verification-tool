@@ -11,7 +11,170 @@ import { triggerAnalysis } from '../../services/pageService';
 import { addReviewComment, getReviewComments, type ReviewComment } from '../../services/reviewService';
 import { parseContentFile, validateContentFile } from '../../utils/csvParser';
 import { generateOverallScoreWeights } from '../../utils/scoreWeights';
-import PersonaRelevanceDisplay from '../../components/personas/PersonaRelevanceDisplay';
+import PersonaRelevanceDisplay, { MultiPersonaRelevanceDisplay } from '../../components/personas/PersonaRelevanceDisplay';
+import type { TargetMarketPersona, CustomerPersona } from '../../types/project';
+
+/**
+ * Convert TargetMarketPersona to CustomerPersona format (old structure) for display
+ */
+const convertTargetMarketToCustomerPersona = (targetMarket: TargetMarketPersona): CustomerPersona => {
+    return {
+        summary: targetMarket.description || '',
+        demographics: {
+            age_range: `${targetMarket.age || 35}-${(targetMarket.age || 35) + 10}`,
+            gender: 'Not specified',
+            location: targetMarket.location || 'Not specified',
+            income_level: 'Not specified'
+        },
+        psychographics: {
+            interests: [],
+            values: [],
+            pain_points: targetMarket.pain_points || [],
+            goals: targetMarket.goals || []
+        },
+        behavior: {
+            online_behavior: targetMarket.influencers || [],
+            buying_patterns: [],
+            decision_factors: targetMarket.hesitations || []
+        }
+    };
+};
+
+/**
+ * Render CustomerPersona in old format (demographics, psychographics, behavior)
+ */
+const renderCustomerPersona = (persona: CustomerPersona, title: string, accentColor: string) => (
+    <div className="bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg overflow-hidden">
+        <div className={`px-4 py-3 font-semibold text-sm flex items-center gap-2 ${accentColor}`}>
+            <Users size={16} />
+            {title}
+        </div>
+        <div className="p-4 bg-[var(--color-bg-secondary)] space-y-4">
+            {/* Summary */}
+            {persona.summary && (
+                <div className="bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded-lg p-3">
+                    <p className="text-sm text-[var(--color-text-secondary)] italic">"{persona.summary}"</p>
+                </div>
+            )}
+
+            {/* Demographics */}
+            <div>
+                <h5 className="text-xs font-bold text-[var(--color-text-secondary)] uppercase mb-2">Demographics</h5>
+                <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-[var(--color-bg-tertiary)] p-2 rounded border border-[var(--color-border)]">
+                        <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Age Range</span>
+                        <p className="text-xs font-medium text-[var(--color-text-primary)]">{persona.demographics.age_range}</p>
+                    </div>
+                    <div className="bg-[var(--color-bg-tertiary)] p-2 rounded border border-[var(--color-border)]">
+                        <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Gender</span>
+                        <p className="text-xs font-medium text-[var(--color-text-primary)]">{persona.demographics.gender}</p>
+                    </div>
+                    <div className="bg-[var(--color-bg-tertiary)] p-2 rounded border border-[var(--color-border)]">
+                        <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Location</span>
+                        <p className="text-xs font-medium text-[var(--color-text-primary)]">{persona.demographics.location}</p>
+                    </div>
+                    <div className="bg-[var(--color-bg-tertiary)] p-2 rounded border border-[var(--color-border)]">
+                        <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Income Level</span>
+                        <p className="text-xs font-medium text-[var(--color-text-primary)]">{persona.demographics.income_level}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Psychographics */}
+            <div>
+                <h5 className="text-xs font-bold text-[var(--color-text-secondary)] uppercase mb-2">Psychographics</h5>
+                <div className="space-y-2">
+                    {persona.psychographics.interests && persona.psychographics.interests.length > 0 && (
+                        <div>
+                            <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Interests</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                                {persona.psychographics.interests.map((item, i) => (
+                                    <span key={i} className="px-2 py-0.5 bg-[var(--color-info-light)] text-[var(--color-info)] text-[10px] rounded-full border border-[var(--color-border)]">{item}</span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {persona.psychographics.values && persona.psychographics.values.length > 0 && (
+                        <div>
+                            <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Values</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                                {persona.psychographics.values.map((item, i) => (
+                                    <span key={i} className="px-2 py-0.5 bg-[var(--color-success-light)] text-[var(--color-success)] text-[10px] rounded-full border border-[var(--color-border)]">{item}</span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {persona.psychographics.pain_points && persona.psychographics.pain_points.length > 0 && (
+                        <div>
+                            <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Pain Points</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                                {persona.psychographics.pain_points.map((item, i) => (
+                                    <span key={i} className="px-2 py-0.5 bg-[var(--color-error-light)] text-[var(--color-error)] text-[10px] rounded-full border border-[var(--color-border)]">{item}</span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    {persona.psychographics.goals && persona.psychographics.goals.length > 0 && (
+                        <div>
+                            <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Goals</span>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                                {persona.psychographics.goals.map((item, i) => (
+                                    <span key={i} className="px-2 py-0.5 bg-[var(--color-accent-light)] text-[var(--color-accent)] text-[10px] rounded-full border border-[var(--color-border)]">{item}</span>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Behavior */}
+            <div>
+                <h5 className="text-xs font-bold text-[var(--color-text-secondary)] uppercase mb-2">Behavior</h5>
+                <div className="space-y-2">
+                    {persona.behavior.decision_factors && persona.behavior.decision_factors.length > 0 && (
+                        <div>
+                            <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Decision Factors</span>
+                            <ul className="mt-1 space-y-1">
+                                {persona.behavior.decision_factors.map((item, i) => (
+                                    <li key={i} className="text-xs text-[var(--color-text-secondary)] flex items-center gap-1">
+                                        <span className="w-1 h-1 bg-[var(--color-text-tertiary)] rounded-full"></span>
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                    {persona.behavior.buying_patterns && persona.behavior.buying_patterns.length > 0 && (
+                        <div>
+                            <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Buying Patterns</span>
+                            <ul className="mt-1 space-y-1">
+                                {persona.behavior.buying_patterns.map((item, i) => (
+                                    <li key={i} className="text-xs text-[var(--color-text-secondary)] flex items-center gap-1">
+                                        <span className="w-1 h-1 bg-[var(--color-text-tertiary)] rounded-full"></span>
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                    {persona.behavior.online_behavior && persona.behavior.online_behavior.length > 0 && (
+                        <div>
+                            <span className="text-[10px] text-[var(--color-text-tertiary)] uppercase">Online Behavior</span>
+                            <ul className="mt-1 space-y-1">
+                                {persona.behavior.online_behavior.map((item, i) => (
+                                    <li key={i} className="text-xs text-[var(--color-text-secondary)] flex items-center gap-1">
+                                        <span className="w-1 h-1 bg-[var(--color-text-tertiary)] rounded-full"></span>
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    </div>
+);
 
 const PageDetailPage: React.FC = () => {
     const { projectId, pageId } = useParams<{ projectId: string; pageId: string }>();
@@ -1565,121 +1728,46 @@ const PageDetailPage: React.FC = () => {
                                 ) : null
                             )}
 
-                            {/* Customer Persona Section */}
+                            {/* Target Market Section */}
                             {page.analysis?.customer_persona && (
                                 <div className="bg-white border border-[var(--color-border)] rounded-lg overflow-hidden">
                                     <div className="bg-violet-100 text-violet-800 px-4 py-2 font-medium text-sm flex items-center gap-2">
                                         <Users size={18} />
-                                        🎯 Customer Persona
+                                        🎯 Target Market
                                     </div>
                                     <div className="p-4 space-y-4">
-                                        {/* Target Relevance Display */}
-                                        {page.analysis.customer_persona.target_relevance && (
+                                        {/* Target Relevance Display - SME/Enterprise only */}
+                                        {page.analysis.customer_persona.target_relevance && 
+                                         (page.analysis.customer_persona.target_relevance.sme_score !== undefined || 
+                                          page.analysis.customer_persona.target_relevance.enterprise_score !== undefined) && (
                                             <PersonaRelevanceDisplay 
                                                 persona={page.analysis.customer_persona}
                                                 className="mb-4"
                                             />
                                         )}
 
-                                        {/* Persona Summary */}
-                                        <div className="bg-violet-50 border border-violet-100 rounded-lg p-3">
-                                            <p className="text-sm text-gray-700 italic">"{page.analysis.customer_persona.summary}"</p>
-                                        </div>
-
-                                        {/* Demographics */}
-                                        <div>
-                                            <h4 className="text-xs font-bold text-violet-700 uppercase mb-2">Demographics</h4>
-                                            <div className="grid grid-cols-2 gap-2">
-                                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
-                                                    <span className="text-[10px] text-gray-500 uppercase">Age Range</span>
-                                                    <p className="text-xs font-medium text-gray-700">{page.analysis.customer_persona.demographics.age_range}</p>
-                                                </div>
-                                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
-                                                    <span className="text-[10px] text-gray-500 uppercase">Gender</span>
-                                                    <p className="text-xs font-medium text-gray-700">{page.analysis.customer_persona.demographics.gender}</p>
-                                                </div>
-                                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
-                                                    <span className="text-[10px] text-gray-500 uppercase">Location</span>
-                                                    <p className="text-xs font-medium text-gray-700">{page.analysis.customer_persona.demographics.location}</p>
-                                                </div>
-                                                <div className="bg-gray-50 p-2 rounded border border-gray-100">
-                                                    <span className="text-[10px] text-gray-500 uppercase">Income Level</span>
-                                                    <p className="text-xs font-medium text-gray-700">{page.analysis.customer_persona.demographics.income_level}</p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Psychographics */}
-                                        <div>
-                                            <h4 className="text-xs font-bold text-violet-700 uppercase mb-2">Psychographics</h4>
-                                            <div className="space-y-2">
-                                                {page.analysis.customer_persona.psychographics.interests.length > 0 && (
-                                                    <div>
-                                                        <span className="text-[10px] text-gray-500 uppercase">Interests</span>
-                                                        <div className="flex flex-wrap gap-1 mt-1">
-                                                            {page.analysis.customer_persona.psychographics.interests.map((item, i) => (
-                                                                <span key={i} className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] rounded-full border border-blue-100">{item}</span>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                {page.analysis.customer_persona.psychographics.pain_points.length > 0 && (
-                                                    <div>
-                                                        <span className="text-[10px] text-gray-500 uppercase">Pain Points</span>
-                                                        <div className="flex flex-wrap gap-1 mt-1">
-                                                            {page.analysis.customer_persona.psychographics.pain_points.map((item, i) => (
-                                                                <span key={i} className="px-2 py-0.5 bg-red-50 text-red-700 text-[10px] rounded-full border border-red-100">{item}</span>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                                {page.analysis.customer_persona.psychographics.goals.length > 0 && (
-                                                    <div>
-                                                        <span className="text-[10px] text-gray-500 uppercase">Goals</span>
-                                                        <div className="flex flex-wrap gap-1 mt-1">
-                                                            {page.analysis.customer_persona.psychographics.goals.map((item, i) => (
-                                                                <span key={i} className="px-2 py-0.5 bg-green-50 text-green-700 text-[10px] rounded-full border border-green-100">{item}</span>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Behavior */}
-                                        {(page.analysis.customer_persona.behavior.decision_factors.length > 0 || page.analysis.customer_persona.behavior.buying_patterns.length > 0) && (
-                                            <div>
-                                                <h4 className="text-xs font-bold text-violet-700 uppercase mb-2">Behavior</h4>
-                                                <div className="space-y-2">
-                                                    {page.analysis.customer_persona.behavior.decision_factors.length > 0 && (
-                                                        <div>
-                                                            <span className="text-[10px] text-gray-500 uppercase">Decision Factors</span>
-                                                            <ul className="mt-1 space-y-1">
-                                                                {page.analysis.customer_persona.behavior.decision_factors.map((item, i) => (
-                                                                    <li key={i} className="text-xs text-gray-700 flex items-center gap-1">
-                                                                        <span className="w-1 h-1 bg-violet-400 rounded-full"></span>
-                                                                        {item}
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
-                                                    {page.analysis.customer_persona.behavior.buying_patterns.length > 0 && (
-                                                        <div>
-                                                            <span className="text-[10px] text-gray-500 uppercase">Buying Patterns</span>
-                                                            <ul className="mt-1 space-y-1">
-                                                                {page.analysis.customer_persona.behavior.buying_patterns.map((item, i) => (
-                                                                    <li key={i} className="text-xs text-gray-700 flex items-center gap-1">
-                                                                        <span className="w-1 h-1 bg-violet-400 rounded-full"></span>
-                                                                        {item}
-                                                                    </li>
-                                                                ))}
-                                                            </ul>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
+                                        {/* Page-Inferred Persona Display (using old CustomerPersona structure) */}
+                                        {renderCustomerPersona(
+                                            convertTargetMarketToCustomerPersona(page.analysis.customer_persona),
+                                            `Page Target: ${page.analysis.customer_persona.name || 'Target Customer'}`,
+                                            'bg-violet-100 text-violet-800'
                                         )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Customer Persona Relevance Section */}
+                            {page.analysis?.customer_persona?.target_relevance?.persona_relevance && 
+                             page.analysis.customer_persona.target_relevance.persona_relevance.length > 0 && (
+                                <div className="bg-white border border-[var(--color-border)] rounded-lg overflow-hidden">
+                                    <div className="bg-blue-100 text-blue-800 px-4 py-2 font-medium text-sm flex items-center gap-2">
+                                        <Users size={18} />
+                                        👥 Customer Personas
+                                    </div>
+                                    <div className="p-4">
+                                        <MultiPersonaRelevanceDisplay
+                                            personaRelevance={page.analysis.customer_persona.target_relevance.persona_relevance}
+                                        />
                                     </div>
                                 </div>
                             )}
