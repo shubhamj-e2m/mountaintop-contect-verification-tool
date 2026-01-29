@@ -165,26 +165,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
         // Check cache - return cached data if fresh and not forcing refetch
         if (!shouldRefetch && state.lastFetched && (now - state.lastFetched) < CACHE_DURATION && state.projects.length > 0) {
-            console.log('fetchProjects: Using cached data');
             return;
         }
 
         // Prevent duplicate simultaneous requests
         if (state.fetchingPromise) {
-            console.log('fetchProjects: Already fetching, waiting for existing request...');
             await state.fetchingPromise;
             return;
         }
 
-        console.log('fetchProjects: starting...');
         const fetchPromise = (async () => {
             set({ isLoading: true, error: null });
             try {
-                console.log('fetchProjects: calling getProjects()...');
                 const dbProjects = await getProjects();
-                console.log('fetchProjects: got projects:', dbProjects);
                 const projects = dbProjects.map(convertDbProjectToApp);
-                console.log('fetchProjects: converted projects:', projects);
                 set({ 
                     projects, 
                     isLoading: false, 
@@ -235,20 +229,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     },
 
     addProject: async (name, websiteUrl, description, userId) => {
-        console.log('addProject: starting...', { name, websiteUrl, description, userId });
         set({ isLoading: true, error: null });
         try {
-            console.log('addProject: calling createProjectAPI...');
             const dbProject = await createProjectAPI({
                 name,
                 website_url: websiteUrl,
                 description,
                 created_by: userId,
             });
-            console.log('addProject: got dbProject:', dbProject);
 
             const project = convertDbProjectToApp(dbProject);
-            console.log('addProject: converted project:', project);
             set((state) => ({
                 projects: [...state.projects, project],
                 isLoading: false,

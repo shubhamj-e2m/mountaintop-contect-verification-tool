@@ -80,7 +80,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             } else if (event === 'TOKEN_REFRESHED' && session?.user) {
                 // Token was refreshed in background - update session silently
                 // No need to refetch user profile, just ensure session is valid
-                console.log('Token refreshed successfully');
             }
         });
 
@@ -94,15 +93,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (fetchingRef.current) return;
         fetchingRef.current = true;
 
-        console.log('Fetching user profile for:', userId);
         try {
             const { data, error } = await supabase
                 .from('users')
                 .select('*')
                 .eq('id', userId)
                 .single();
-
-            console.log('Profile fetch result:', { data, error });
 
             // Only update if we got valid data - keeps the fallback user otherwise
             if (data && !error) {
