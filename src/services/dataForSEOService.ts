@@ -57,7 +57,6 @@ async function waitForRateLimit(): Promise<void> {
 
     if (timeSinceLastRequest < MIN_REQUEST_INTERVAL_MS) {
         const waitTime = MIN_REQUEST_INTERVAL_MS - timeSinceLastRequest;
-        console.log(`DataForSEO: Rate limiting - waiting ${waitTime}ms`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
     }
 
@@ -85,12 +84,6 @@ export async function fetchKeywordMetrics(
     const login = import.meta.env.VITE_DATAFORSEO_LOGIN;
     const password = import.meta.env.VITE_DATAFORSEO_PASSWORD;
 
-    console.log('DataForSEO: Checking credentials...', {
-        loginSet: !!login,
-        passwordSet: !!password,
-        keywordCount: keywords.length
-    });
-
     if (!login || !password) {
         console.warn('DataForSEO credentials not configured, using mock data');
         return generateMockData(keywords);
@@ -98,7 +91,6 @@ export async function fetchKeywordMetrics(
 
     // Batch keywords (DataForSEO allows up to 1000 per request)
     // We already batch all keywords in one request - this is the correct pattern
-    console.log(`DataForSEO: Batching ${keywords.length} keywords in single request`);
 
     // Wait for rate limit
     await waitForRateLimit();
@@ -108,8 +100,6 @@ export async function fetchKeywordMetrics(
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            console.log(`DataForSEO: Attempt ${attempt}/${maxRetries}`);
-
             const credentials = btoa(`${login}:${password}`);
 
             const response = await fetch(DATAFORSEO_API_URL, {
@@ -130,7 +120,6 @@ export async function fetchKeywordMetrics(
             }
 
             const data: DataForSEOResponse = await response.json();
-            console.log('DataForSEO: Response status:', data.status_code, data.status_message);
 
             // Check for account-level issues
             if (data.status_code !== 20000) {
@@ -141,8 +130,6 @@ export async function fetchKeywordMetrics(
             const results: KeywordMetrics[] = [];
 
             for (const task of data.tasks) {
-                console.log('DataForSEO: Task status:', task.status_code, task.status_message);
-
                 // Handle account suspension gracefully
                 if (task.status_code === 40201) {
                     console.error('DataForSEO: Account suspended. Contact support@dataforseo.com');
@@ -150,7 +137,6 @@ export async function fetchKeywordMetrics(
                 }
 
                 if (task.status_code === 20000 && task.result) {
-                    console.log('DataForSEO: Results count:', task.result.length);
                     for (const result of task.result) {
                         results.push({
                             keyword: result.keyword,
@@ -165,7 +151,6 @@ export async function fetchKeywordMetrics(
                 }
             }
 
-            console.log('DataForSEO: Total results extracted:', results.length);
             return results;
 
         } catch (error) {
@@ -174,7 +159,6 @@ export async function fetchKeywordMetrics(
             if (attempt < maxRetries) {
                 // Exponential backoff: 2s, 5s, 15s
                 const backoffMs = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
-                console.log(`DataForSEO: Retrying in ${Math.round(backoffMs)}ms...`);
                 await sleep(backoffMs);
             }
         }

@@ -30,7 +30,6 @@ const TrailmapPersonasDisplay: React.FC<TrailmapPersonasDisplayProps> = ({
             }>(`/projects/${projectId}/trailmap-personas`);
             
             if (result.success) {
-                console.log('Trailmap Personas fetched:', JSON.stringify(result.data, null, 2));
                 setTrailmapPersonas(result.data);
                 setError(null);
             } else {

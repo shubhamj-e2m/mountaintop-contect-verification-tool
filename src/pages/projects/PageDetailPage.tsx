@@ -712,8 +712,6 @@ const PageDetailPage: React.FC = () => {
             setContentH2s(parsed.h2.join('\n'));
             setContentH3s(parsed.h3.join('\n'));
             setContentParagraphs(parsed.paragraphs.join('\n\n'));
-
-            console.log('File parsed successfully:', parsed);
         } catch (error) {
             console.error('File parsing error:', error);
             setCsvError(error instanceof Error ? error.message : 'Failed to parse file');
