@@ -596,23 +596,7 @@ const PageDetailPage: React.FC = () => {
             return `The following keywords appear in both primary and secondary lists: ${commonKeywords.join(', ')}. A keyword should be either primary or secondary, not both.`;
         }
 
-        // Check for duplicates with existing keywords (if page has existing SEO data)
-        if (page?.seo_data) {
-            const existingPrimary = (page.seo_data.primaryKeywords || []).map(normalize);
-            const existingSecondary = (page.seo_data.secondaryKeywords || []).map(normalize);
-            const allExisting = [...existingPrimary, ...existingSecondary];
-
-            const duplicatesWithExisting = [
-                ...primaryNormalized.filter(k => allExisting.includes(k)),
-                ...secondaryNormalized.filter(k => allExisting.includes(k))
-            ];
-
-            if (duplicatesWithExisting.length > 0) {
-                const uniqueDuplicates = [...new Set(duplicatesWithExisting)];
-                return `The following keywords already exist on this page: ${uniqueDuplicates.join(', ')}. Please use different keywords.`;
-            }
-        }
-
+        // No check for "already exist" here: backend merges new keywords with existing (patch semantics).
         return null;
     };
 

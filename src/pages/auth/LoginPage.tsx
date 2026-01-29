@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import type { UserRole } from '../../types/user';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
     const { login, signUp, isLoading } = useAuth();
+    const location = useLocation();
+    const messageFromState = location.state && typeof location.state === 'object' && 'message' in location.state
+        ? String((location.state as { message: string }).message)
+        : '';
     const [isSignUp, setIsSignUp] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -149,9 +154,20 @@ const LoginPage: React.FC = () => {
                         </div>
                     )}
 
-                    {success && (
+                    {(success || messageFromState) && (
                         <div className="p-3 bg-success-light text-success text-sm rounded-md">
-                            {success}
+                            {success || messageFromState}
+                        </div>
+                    )}
+
+                    {!isSignUp && (
+                        <div className="text-right">
+                            <Link
+                                to="/forgot-password"
+                                className="text-sm text-accent hover:underline"
+                            >
+                                Forgot password?
+                            </Link>
                         </div>
                     )}
 

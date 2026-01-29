@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import type { User, UserRole } from '../types/user';
 import { supabase } from '../lib/supabase';
@@ -7,9 +7,14 @@ interface AuthContextType {
     user: User | null;
     isAuthenticated: boolean;
     isLoading: boolean;
+    isPasswordRecovery: boolean;
     login: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
     signUp: (email: string, password: string, name: string, role?: UserRole) => Promise<void>;
+    resetPasswordForEmail: (email: string) => Promise<void>;
+    updatePassword: (newPassword: string) => Promise<void>;
+    clearPasswordRecovery: () => void;
+    refreshUserProfile: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,6 +22,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
     const fetchingRef = useRef(false);
 
     // Helper to create a user from auth session data (fallback)
@@ -64,7 +70,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         } = supabase.auth.onAuthStateChange(async (event, session) => {
             if (!mounted) return;
 
-            if (event === 'SIGNED_IN' && session?.user) {
+            if (event === 'PASSWORD_RECOVERY' && session?.user) {
+                const fallbackUser = createUserFromSession(session.user);
+                setUser(fallbackUser);
+                setIsPasswordRecovery(true);
+                setIsLoading(false);
+            } else if (event === 'SIGNED_IN' && session?.user) {
                 // Set fallback user immediately
                 const fallbackUser = createUserFromSession(session.user);
                 setUser(fallbackUser);
@@ -76,6 +87,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 }
             } else if (event === 'SIGNED_OUT') {
                 setUser(null);
+                setIsPasswordRecovery(false);
                 setIsLoading(false);
             } else if (event === 'TOKEN_REFRESHED' && session?.user) {
                 // Token was refreshed in background - update session silently
@@ -170,15 +182,41 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // User profile will be created by database trigger and fetched by onAuthStateChange
     };
 
+    const resetPasswordForEmail = async (email: string) => {
+        // Redirect URL must be allowed in Supabase Dashboard > Auth > URL Configuration.
+        const redirectTo = `${window.location.origin}/reset-password`;
+        const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+        if (error) throw error;
+    };
+
+    const updatePassword = async (newPassword: string) => {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+        setIsPasswordRecovery(false);
+    };
+
+    const clearPasswordRecovery = useCallback(() => {
+        setIsPasswordRecovery(false);
+    }, []);
+
+    const refreshUserProfile = useCallback(() => {
+        if (user?.id) fetchUserProfile(user.id);
+    }, [user?.id]);
+
     return (
         <AuthContext.Provider
             value={{
                 user,
                 isAuthenticated: !!user,
                 isLoading,
+                isPasswordRecovery,
                 login,
                 logout,
                 signUp,
+                resetPasswordForEmail,
+                updatePassword,
+                clearPasswordRecovery,
+                refreshUserProfile,
             }}
         >
             {children}
